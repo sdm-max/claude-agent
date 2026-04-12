@@ -1,4 +1,4 @@
-import type { AgentFrontmatter, GovernanceProfile } from "./types";
+import type { AgentFrontmatter, GovernanceProfile, GovernanceCategory } from "./types";
 
 export interface ValidationError {
   field: string;
@@ -86,6 +86,46 @@ export function validateFrontmatter(fm: AgentFrontmatter): ValidationError[] {
     });
   }
 
+  // bypassPermissions 경고
+  if (fm.permissionMode === "bypassPermissions") {
+    errors.push({
+      field: "permissionMode",
+      message: "bypassPermissions is dangerous — use only for trusted automation",
+      messageKo: "bypassPermissions 모드는 위험합니다 — 신뢰할 수 있는 자동화에서만 사용하세요",
+      severity: "warning",
+    });
+  }
+
+  // tools 없이 disallowedTools만 있는 경우
+  if ((!fm.tools || fm.tools.length === 0) && fm.disallowedTools && fm.disallowedTools.length > 0) {
+    errors.push({
+      field: "tools",
+      message: "disallowedTools set but no tools specified — agent may have unexpected access",
+      messageKo: "차단 도구가 설정되었지만 허용 도구가 없음 — 예상치 못한 접근이 발생할 수 있습니다",
+      severity: "warning",
+    });
+  }
+
+  // opus 모델 + 높은 maxTurns 비용 경고
+  if (fm.model === "opus" && fm.maxTurns && fm.maxTurns > 30) {
+    errors.push({
+      field: "maxTurns",
+      message: "Opus model with >30 turns can be very expensive",
+      messageKo: "Opus 모델 + 30턴 이상은 비용이 매우 높을 수 있습니다",
+      severity: "warning",
+    });
+  }
+
+  // Write/Edit 도구 + worktree 격리 없음 경고
+  if (fm.tools?.some((t) => ["Write", "Edit"].includes(t)) && !fm.isolation) {
+    errors.push({
+      field: "isolation",
+      message: "Write/Edit tools without worktree isolation — changes affect working tree directly",
+      messageKo: "Write/Edit 도구 사용 시 worktree 격리 없음 — 변경사항이 작업 트리에 직접 영향",
+      severity: "warning",
+    });
+  }
+
   // maxTurns 범위
   if (fm.maxTurns !== undefined && (fm.maxTurns < 1 || fm.maxTurns > 100)) {
     errors.push({
@@ -93,6 +133,85 @@ export function validateFrontmatter(fm: AgentFrontmatter): ValidationError[] {
       message: "maxTurns must be between 1 and 100",
       messageKo: "최대 턴 수는 1~100 사이여야 합니다",
       severity: "error",
+    });
+  }
+
+  return errors;
+}
+
+/**
+ * 에이전트 간 호출 권한 검증
+ * 오케스트레이터만 Agent 도구를 사용할 수 있음
+ */
+export function validateCallPermission(
+  callerCategory: GovernanceCategory,
+  hasAgentTool: boolean
+): ValidationError[] {
+  const errors: ValidationError[] = [];
+
+  if (hasAgentTool && callerCategory !== "orchestrator") {
+    errors.push({
+      field: "tools",
+      message: `Only orchestrator agents can use the Agent tool. Current category: ${callerCategory}`,
+      messageKo: `오케스트레이터만 Agent 도구를 사용할 수 있습니다. 현재 카테고리: ${callerCategory}`,
+      severity: "error",
+    });
+  }
+
+  return errors;
+}
+
+/**
+ * 프로젝트 내 에이전트 집합의 정합성 검증
+ */
+export function validateProjectAgents(
+  agents: { name: string; frontmatter: AgentFrontmatter; category?: GovernanceCategory }[]
+): ValidationError[] {
+  const errors: ValidationError[] = [];
+
+  // 이름 중복 검사
+  const names = agents.map((a) => a.name);
+  const duplicates = names.filter((n, i) => names.indexOf(n) !== i);
+  if (duplicates.length > 0) {
+    errors.push({
+      field: "name",
+      message: `Duplicate agent names: ${[...new Set(duplicates)].join(", ")}`,
+      messageKo: `에이전트 이름 중복: ${[...new Set(duplicates)].join(", ")}`,
+      severity: "error",
+    });
+  }
+
+  // 오케스트레이터 여러 개 경고
+  const orchestrators = agents.filter((a) => a.category === "orchestrator");
+  if (orchestrators.length > 1) {
+    errors.push({
+      field: "category",
+      message: `Multiple orchestrators (${orchestrators.map((o) => o.name).join(", ")}) — ensure no recursive calls`,
+      messageKo: `오케스트레이터 ${orchestrators.length}개 — 재귀 호출이 없는지 확인하세요`,
+      severity: "warning",
+    });
+  }
+
+  // Agent 도구 + 비-오케스트레이터 검사
+  for (const agent of agents) {
+    if (agent.frontmatter.tools?.includes("Agent") && agent.category && agent.category !== "orchestrator") {
+      errors.push({
+        field: "tools",
+        message: `Agent "${agent.name}" (${agent.category}) has Agent tool but is not an orchestrator`,
+        messageKo: `에이전트 "${agent.name}" (${agent.category})이(가) Agent 도구를 갖고 있지만 오케스트레이터가 아닙니다`,
+        severity: "warning",
+      });
+    }
+  }
+
+  // 전체 비용 경고
+  const opusCount = agents.filter((a) => a.frontmatter.model === "opus").length;
+  if (opusCount > 3) {
+    errors.push({
+      field: "model",
+      message: `${opusCount} agents use Opus model — consider using Sonnet/Haiku for simpler tasks`,
+      messageKo: `${opusCount}개 에이전트가 Opus 모델 사용 중 — 단순 작업에는 Sonnet/Haiku를 고려하세요`,
+      severity: "warning",
     });
   }
 

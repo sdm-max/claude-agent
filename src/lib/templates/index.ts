@@ -1566,6 +1566,11 @@ name: code-reviewer
 description: Code review agent — security, performance, quality, accessibility
 model: sonnet
 tools: [Read, Glob, Grep]
+disallowedTools: [Write, Edit, Bash, Agent]
+permissionMode: plan
+maxTurns: 15
+effort: high
+color: blue
 ---
 
 # Code Reviewer
@@ -1614,6 +1619,11 @@ name: test-writer
 description: Generates comprehensive tests for existing code
 model: sonnet
 tools: [Read, Write, Glob, Grep, Bash]
+disallowedTools: [Agent]
+permissionMode: acceptEdits
+maxTurns: 25
+effort: high
+color: green
 ---
 
 # Test Writer
@@ -1656,6 +1666,11 @@ name: security-auditor
 description: Security audit — vulnerabilities, dependencies, auth flows
 model: opus
 tools: [Read, Glob, Grep, Bash]
+disallowedTools: [Write, Edit, Agent]
+permissionMode: plan
+maxTurns: 20
+effort: high
+color: red
 ---
 
 # Security Auditor
@@ -1702,6 +1717,11 @@ name: docs-writer
 description: Generates documentation from code analysis
 model: sonnet
 tools: [Read, Write, Glob, Grep]
+disallowedTools: [Bash, Agent]
+permissionMode: acceptEdits
+maxTurns: 20
+effort: medium
+color: cyan
 ---
 
 # Documentation Writer
@@ -1743,6 +1763,12 @@ name: migration-assistant
 description: Framework/library migration planning and execution
 model: opus
 tools: [Read, Write, Edit, Glob, Grep, Bash]
+disallowedTools: [Agent]
+permissionMode: auto
+maxTurns: 30
+effort: high
+isolation: worktree
+color: orange
 ---
 
 # Migration Assistant
@@ -1782,6 +1808,11 @@ name: performance-analyzer
 description: Finds and fixes performance bottlenecks
 model: sonnet
 tools: [Read, Glob, Grep, Bash]
+disallowedTools: [Write, Edit, Agent]
+permissionMode: plan
+maxTurns: 15
+effort: high
+color: yellow
 ---
 
 # Performance Analyzer

@@ -8,6 +8,7 @@ import ScopeBadge from "@/components/scope-badge";
 import ClaudeMdEditor from "@/components/editors/ClaudeMdEditor";
 import FileDirectoryEditor from "@/components/editors/FileDirectoryEditor";
 import HooksUnifiedEditor from "@/components/editors/HooksUnifiedEditor";
+import AgentEditor from "@/components/agents/AgentEditor";
 import ImportModal from "@/components/project/ImportModal";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -336,7 +337,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         </TabsContent>
 
         <TabsContent value="agents" className="flex-1 overflow-hidden">
-          <FileDirectoryEditor projectId={id} type="agents" fileExtension=".md" editorLanguage="markdown" />
+          <AgentEditor projectId={id} />
         </TabsContent>
 
         <TabsContent value="rules" className="flex-1 overflow-hidden">
