@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTemplateById } from "@/lib/templates";
+import { annotateSettingsJson } from "@/lib/templates/annotate";
 
 // GET /api/templates/[id]
 export async function GET(
@@ -15,6 +16,6 @@ export async function GET(
 
   return NextResponse.json({
     ...template,
-    settingsJson: JSON.stringify(template.settings, null, 2),
+    settingsJson: annotateSettingsJson(template.settings as Record<string, unknown>),
   });
 }
