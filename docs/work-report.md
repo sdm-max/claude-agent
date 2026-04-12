@@ -1,0 +1,779 @@
+# Claude Code Settings Manager — 작업내역서
+
+## 프로젝트 개요
+Claude Code의 설정 파일(settings.json, CLAUDE.md, agents, rules, hooks)을 웹 UI로 관리하는 앱.
+4개 스코프(Global → User → Project → Local) 계층 구조를 지원하며, 디스크 파일과 양방향 동기화(Import/Export).
+
+## 기술 스택
+- Next.js 16.2.3 App Router + TypeScript
+- Drizzle ORM + SQLite (better-sqlite3, WAL mode)
+- shadcn/ui (@base-ui/react v1.3.0)
+- CodeMirror 6 (JSON, Markdown, Shell 구문 강조)
+
+---
+
+## DB 스키마
+
+### projects
+| 컬럼 | 타입 | 설명 |
+|------|------|------|
+| id | text PK | nanoid |
+| name | text NOT NULL | 프로젝트 이름 |
+| path | text NOT NULL | 디스크 경로 (trim 적용) |
+| description | text | 설명 |
+| created_at | integer | 생성 시각 (epoch ms) |
+| updated_at | integer | 수정 시각 |
+
+### settings
+| 컬럼 | 타입 | 설명 |
+|------|------|------|
+| id | integer PK | auto increment |
+| scope | text NOT NULL | global / user / project / local |
+| project_path | text NULL | NULL=global/user, 경로=project/local |
+| config | text NOT NULL | JSON 문자열 (검증 후 저장) |
+| created_at | integer | 생성 시각 |
+| updated_at | integer | 수정 시각 |
+| | UNIQUE | (scope, project_path) |
+
+### files
+| 컬럼 | 타입 | 설명 |
+|------|------|------|
+| id | text PK | nanoid |
+| project_id | text FK → projects.id | CASCADE 삭제 |
+| type | text NOT NULL | claude-md / settings |
+| scope | text NOT NULL | user / project / local |
+| content | text NOT NULL | 파일 내용 |
+| created_at | integer | 생성 시각 |
+| updated_at | integer | 수정 시각 |
+
+### file_versions
+| 컬럼 | 타입 | 설명 |
+|------|------|------|
+| id | text PK | nanoid |
+| file_id | text FK → files.id | CASCADE 삭제 |
+| content | text NOT NULL | 이전 버전 내용 |
+| created_at | integer | 저장 시각 |
+
+---
+
+## 페이지 구성
+
+### 홈 (`/`)
+- 앱 소개 + Global/User 설정 바로가기 + 프로젝트 목록
+
+### Global 설정 (`/settings/global`)
+- Form / JSON 탭 전환
+- Import from disk / Save / Export to disk
+
+### User 설정 (`/settings/user`)
+- Global과 동일 구조, scope만 다름
+
+### 프로젝트 목록 (`/projects`)
+- 등록된 프로젝트 카드 목록
+- 새 프로젝트 생성 폼 (이름, 경로, 설명)
+
+### 프로젝트 상세 (`/projects/[id]`) — 6개 탭
+| 탭 | 내용 |
+|----|------|
+| Overview | 프로젝트 정보, Import from disk 버튼, 파일 목록 + 삭제 |
+| Settings | Project/Local/Merged 스코프 전환, Form/JSON 편집, Import/Export/Save/Copy |
+| CLAUDE.md | User/Project/Local 스코프, 마크다운 에디터, Import/Export, 버전 히스토리 |
+| Agents | split-pane: 파일 목록(좌) + CodeMirror 마크다운 에디터(우) |
+| Rules | 동일 split-pane 구조 |
+| Hooks | 통합 UI: 좌(스크립트 편집) + 우(이벤트 연결 wiring), Script/Inline 토글 |
+
+---
+
+## UI 컴포넌트
+
+### shadcn/ui 기반 (`src/components/ui/`)
+| 컴포넌트 | 파일 | 용도 |
+|----------|------|------|
+| Button | button.tsx | variant: default/secondary/ghost/outline/link, size: default/sm/xs/icon-xs |
+| Badge | badge.tsx | 스코프 표시, 태그 |
+| Card | card.tsx | 파일 카드, 설정 섹션, size: default/sm |
+| Dialog | dialog.tsx | 모달 (unsaved 경고, 새 파일 생성) |
+| Input | input.tsx | 텍스트 입력 |
+| Label | label.tsx | 폼 라벨 |
+| Select | select.tsx | 모델 선택, 샌드박스 타입 등 |
+| Separator | separator.tsx | 구분선 |
+| Sheet | sheet.tsx | 사이드 패널 |
+| Switch | switch.tsx | 토글 |
+| Tabs | Tabs.tsx | 탭 UI (variant: default/line) |
+| Textarea | textarea.tsx | 멀티라인 입력 (시스템 프롬프트) |
+
+### 커스텀 컴포넌트
+| 컴포넌트 | 파일 | 용도 |
+|----------|------|------|
+| CodeEditor | editors/CodeEditor.tsx | CodeMirror 6 래퍼 (markdown/json/shell) |
+| ClaudeMdEditor | editors/ClaudeMdEditor.tsx | CLAUDE.md 전용 에디터 + 스코프/버전 |
+| FileDirectoryEditor | editors/FileDirectoryEditor.tsx | agents/rules/hooks split-pane 에디터 |
+| HooksUnifiedEditor | editors/HooksUnifiedEditor.tsx | Hook 통합 에디터 (스크립트 편집 + 이벤트 연결) |
+| EditorToolbar | editors/EditorToolbar.tsx | Save/History/커스텀 버튼 툴바 |
+| VersionHistory | editors/VersionHistory.tsx | 파일 버전 타임라인 + 복원 |
+| ImportModal | project/ImportModal.tsx | 디스크 파일 스캔 + 선택 import |
+| SettingsForm | settings-form.tsx | 설정 폼 에디터 (하위 컴포넌트 포함) |
+| SettingsPage | settings-page.tsx | Global/User 설정 페이지 공통 |
+| ScopeBadge | scope-badge.tsx | 스코프 색상 뱃지 |
+| JsonEditor | json-editor.tsx | JSON 전용 CodeMirror |
+| Sidebar | sidebar.tsx | 사이드바 네비게이션 |
+
+### SettingsForm 하위 컴포넌트
+| 컴포넌트 | 용도 |
+|----------|------|
+| TagArrayField | Allow/Deny 태그 배열 입력 (Enter로 추가, ×로 삭제) |
+| KeyValueEditor | 환경변수, MCP env용 Key-Value 편집 |
+| HookSection | 훅 이벤트별 Rule 목록 (Matcher + Command + Timeout) |
+| McpServersEditor | MCP 서버 추가/삭제 (Command, Args, Env) |
+
+---
+
+## CodeMirror 확장
+
+| 언어 | 패키지 | 용도 |
+|------|--------|------|
+| JSON | `@codemirror/lang-json` | settings.json 편집 |
+| Markdown | `@codemirror/lang-markdown` | CLAUDE.md, agents, rules 편집 |
+| Shell/Bash | `@codemirror/legacy-modes/mode/shell` + `StreamLanguage` | hooks .sh 스크립트 편집 |
+
+기존 `@codemirror/lang-json`, `@codemirror/lang-markdown`에 추가로 `@codemirror/legacy-modes` 패키지를 설치하여 shell 구문 강조 지원.
+
+---
+
+## Merged 설정 병합 로직
+
+API: `GET /api/projects/[id]/settings/merged`
+
+**병합 순서** (낮은 우선순위 → 높은 우선순위):
+```
+Global → User → Project → Local
+```
+
+**병합 규칙:**
+- 일반 필드 (model, env, sandbox 등): 상위 스코프를 하위 스코프가 덮어씀 (shallow merge)
+- permissions.allow: 4개 스코프의 배열을 **합산** (중복 제거)
+- permissions.deny: 4개 스코프의 배열을 **합산** (중복 제거)
+
+**응답 구조:**
+```json
+{
+  "merged": { /* 최종 합산 설정 */ },
+  "sources": {
+    "global": { /* global만 */ },
+    "user": { /* user만 */ },
+    "project": { /* project만 */ },
+    "local": { /* local만 */ }
+  }
+}
+```
+
+UI에서 Merged 스코프 선택 시 읽기 전용으로 표시 (Save/Import/Export/Copy 비활성화).
+
+---
+
+## 파일 생성 템플릿
+
+### 에이전트 템플릿 (.md)
+```markdown
+# {파일명을 제목으로 변환}
+
+## Mandatory Rules
+- Follow all governance rules
+- Follow all project rules
+- No speculation — evidence only
+
+## Role
+[Describe the agent's role and responsibilities]
+
+## Required Actions
+1. [First action]
+2. [Second action]
+
+## Prohibitions
+- [What this agent must NOT do]
+
+## Output Format
+- [Expected output structure]
+```
+
+### 규칙 템플릿 (.md)
+```markdown
+# {파일명을 제목으로 변환}
+
+## Rules
+
+1. [Rule description]
+   - Rationale: [Why this rule exists]
+
+2. [Rule description]
+   - Rationale: [Why this rule exists]
+```
+
+### 훅 스크립트 템플릿 (.sh)
+```bash
+#!/bin/bash
+# {파일명}
+# Hook script for Claude Code
+#
+# Input: JSON on stdin
+# Output: JSON on stdout (optional)
+
+set -euo pipefail
+
+# Read input
+INPUT=$(cat)
+
+# Process
+# echo "$INPUT" | jq '.tool_name' -r
+
+# Output (optional - for blocking hooks)
+# echo '{"decision": "block", "reason": "Blocked by hook"}'
+```
+
+---
+
+## CLAUDE.md 프로젝트 규칙
+
+프로젝트 루트에 `CLAUDE.md` 추가. 향후 Claude Code가 이 프로젝트에서 작업할 때 자동 적용:
+
+- 지시받은 작업은 끝까지 완료 후 보고. 중간에 멈추지 않음
+- "할까요?" 확인 질문 금지. 지시받은 것은 바로 실행
+- 미구현 목록 나열 시 바로 전부 구현
+- 완료 보고 시 증거 필수 (API 테스트, 빌드, 동작 확인)
+- 에이전트 구현 후 QA/수정까지 한 사이클 완료
+
+---
+
+## 구현 완료 기능
+
+### 1. Settings 관리 (4 스코프)
+| 스코프 | 디스크 경로 | 설명 |
+|--------|------------|------|
+| Global | `~/.claude/settings.json` | 전체 공유 설정 |
+| User | `~/.claude/settings.local.json` | 사용자 개인 설정 |
+| Project | `{project}/.claude/settings.json` | 프로젝트 공유 설정 |
+| Local | `{project}/.claude/settings.local.json` | 프로젝트 로컬 설정 |
+
+- Form 에디터: Model, System Prompt, Max Turns, API Key, Working Directory, Max Tokens, Temperature, Output Format
+- JSON 에디터: CodeMirror 6 기반, 구문 강조 + 검색
+- Import from disk / Export to disk
+- Scope 복사 (Project ↔ Local)
+- Merged 미리보기 (4 스코프 합산 결과, 읽기 전용)
+
+### 2. Permissions 관리
+- Allow / Deny 규칙 태그 입력
+- `Bash(git*)`, `Read`, `WebFetch(domain:...)` 등 패턴 지원
+
+### 3. Hooks JSON 설정 (6개 이벤트)
+- PreToolUse, PostToolUse, Notification, Stop, SessionStart, UserPromptSubmit
+- 이벤트별 Rule 추가/삭제
+- Matcher 패턴 + Command + Timeout 설정
+
+### 4. MCP Servers 관리
+- 서버 추가/삭제
+- Command, Args, Environment 설정
+
+### 5. Environment Variables
+- Key-Value 편집기
+- 추가/삭제
+
+### 6. Sandbox 설정
+- Docker / None 타입 선택
+- Container 이름 설정
+
+### 7. CLAUDE.md 에디터
+- User / Project / Local 3개 스코프
+- CodeMirror Markdown 에디터
+- Import from disk / Export to disk
+- 버전 히스토리 (이전 버전 복원)
+
+### 8. 에이전트 관리 (.claude/agents/)
+- 파일 목록 (split-pane UI)
+- 생성 (구조화된 템플릿 자동 생성)
+- 편집 (CodeMirror Markdown)
+- 삭제
+- sees 프로젝트: 16개 에이전트 정상 조회/편집
+
+### 9. 규칙 관리 (.claude/rules/)
+- 파일 목록/생성/편집/삭제
+- 구조화된 규칙 템플릿
+- sees 프로젝트: 3개 규칙 파일 정상 조회/편집
+
+### 10. 훅 통합 관리 (.claude/hooks/ + settings.hooks)
+- 좌측: 파일 목록/생성/편집/삭제 (bash 구문 강조)
+- 우측: 6개 이벤트별 hook rule 연결 (아코디언 UI)
+- Script 모드: 드롭다운에서 .sh 파일 선택 → 절대경로 저장
+- Inline 모드: jq 파이프 등 인라인 명령 직접 입력
+- 자동 감지: 기존 설정 로드 시 Script/Inline 자동 판별
+- matcher + timeout 설정 지원
+- Save Wiring → settings.hooks에 저장
+- sees 프로젝트: 15개 훅 스크립트 + 18개 hook rules 정상 조회
+
+### 11. 프로젝트 관리
+- 프로젝트 생성/수정/삭제
+- Path 자동 trim (앞뒤 공백, 끝 슬래시 제거)
+- Path 중복 체크 (409 반환)
+- Import from disk (디스크 파일 자동 스캔)
+
+### 12. 사이드바 네비게이션
+- Global / User 설정 링크
+- 프로젝트 목록 (자동 갱신)
+- 프로젝트 추가 바로가기
+
+---
+
+## 보안 및 안정성
+
+### 보안
+- Path traversal 방지: 파일명에 `/`, `..`, `.` 차단
+- 중복 파일 생성 방지: 409 Conflict 반환
+- fs.mkdirSync/unlinkSync try-catch 래핑
+
+### JSON 무결성 (재발 방지)
+- **DB 저장 시**: `JSON.parse()` 검증 → invalid JSON은 400 차단
+- **Export 시**: parse 실패하면 500 차단, 빈 `{}` 이면 404 차단
+- **Import 시**: parse → stringify 정규화 후 저장 (trailing data 제거)
+- **Round-trip**: Export → Import 왕복 시 데이터 동일성 검증 완료
+
+### 에러 처리
+- 모든 fetch 호출에 try-catch + 서버 에러 메시지 표시
+- 네트워크 에러 시 사용자에게 명확한 메시지
+- res.ok 체크 후 에러 상태 분기
+
+---
+
+## API 엔드포인트
+
+### Global/User Settings
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/settings?scope=global\|user` | 설정 조회 |
+| PUT | `/api/settings?scope=global\|user` | 설정 저장 (JSON 검증) |
+| POST | `/api/settings/import?scope=global\|user` | 디스크에서 import |
+| POST | `/api/settings/export?scope=global\|user` | 디스크로 export |
+
+### Project Settings
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/projects/[id]/settings?scope=project\|local` | 설정 조회 |
+| PUT | `/api/projects/[id]/settings?scope=project\|local` | 설정 저장 (JSON 검증) |
+| GET | `/api/projects/[id]/settings/merged` | 4스코프 병합 조회 |
+| POST | `/api/projects/[id]/import-settings?scope=project\|local` | 디스크에서 import |
+| POST | `/api/projects/[id]/export?scope=project\|local` | 디스크로 export |
+
+### CLAUDE.md
+| Method | Path | 설명 |
+|--------|------|------|
+| POST | `/api/projects/[id]/import-claudemd?scope=...` | 디스크에서 import |
+| POST | `/api/projects/[id]/export-claudemd?scope=...` | 디스크로 export |
+
+### Agents / Rules / Hooks
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/projects/[id]/agents` | 에이전트 목록 |
+| POST | `/api/projects/[id]/agents` | 에이전트 생성 (중복 409) |
+| PUT | `/api/projects/[id]/agents` | 에이전트 수정 |
+| DELETE | `/api/projects/[id]/agents?name=...` | 에이전트 삭제 |
+| GET | `/api/projects/[id]/rules` | 규칙 목록 |
+| POST | `/api/projects/[id]/rules` | 규칙 생성 |
+| PUT | `/api/projects/[id]/rules` | 규칙 수정 |
+| DELETE | `/api/projects/[id]/rules?name=...` | 규칙 삭제 |
+| GET | `/api/projects/[id]/hooks` | 훅 목록 |
+| POST | `/api/projects/[id]/hooks` | 훅 생성 |
+| PUT | `/api/projects/[id]/hooks` | 훅 수정 |
+| DELETE | `/api/projects/[id]/hooks?name=...` | 훅 삭제 |
+
+### Projects / Files
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/projects` | 프로젝트 목록 |
+| POST | `/api/projects` | 프로젝트 생성 |
+| GET | `/api/projects/[id]` | 프로젝트 상세 |
+| PUT | `/api/projects/[id]` | 프로젝트 수정 |
+| DELETE | `/api/projects/[id]` | 프로젝트 삭제 |
+| GET | `/api/projects/[id]/files` | 파일 목록 |
+| POST | `/api/projects/[id]/files` | 파일 생성 |
+| PUT | `/api/projects/[id]/files/[fileId]` | 파일 수정 |
+| DELETE | `/api/projects/[id]/files/[fileId]` | 파일 삭제 |
+| POST | `/api/projects/[id]/import` | 디스크 파일 스캔/import |
+
+---
+
+## 파일 구조
+
+```
+src/
+├── app/
+│   ├── api/
+│   │   ├── settings/
+│   │   │   ├── route.ts              # Global/User settings CRUD
+│   │   │   ├── import/route.ts       # Global/User import
+│   │   │   └── export/route.ts       # Global/User export
+│   │   └── projects/
+│   │       ├── route.ts              # Projects list/create
+│   │       └── [id]/
+│   │           ├── route.ts          # Project CRUD
+│   │           ├── settings/
+│   │           │   ├── route.ts      # Project settings CRUD
+│   │           │   └── merged/route.ts # Merged 4-scope view
+│   │           ├── agents/route.ts   # Agents CRUD
+│   │           ├── rules/route.ts    # Rules CRUD
+│   │           ├── hooks/route.ts    # Hooks CRUD
+│   │           ├── files/
+│   │           │   ├── route.ts      # Files list/create
+│   │           │   └── [fileId]/route.ts # File CRUD
+│   │           ├── import/route.ts
+│   │           ├── import-settings/route.ts
+│   │           ├── import-claudemd/route.ts
+│   │           ├── export/route.ts
+│   │           └── export-claudemd/route.ts
+│   ├── settings/
+│   │   ├── global/page.tsx
+│   │   └── user/page.tsx
+│   ├── projects/
+│   │   ├── page.tsx                  # Projects list page
+│   │   └── [id]/page.tsx            # Project detail (6 tabs)
+│   ├── page.tsx                      # Home
+│   └── globals.css
+├── components/
+│   ├── editors/
+│   │   ├── CodeEditor.tsx            # CodeMirror (markdown/json/shell)
+│   │   ├── ClaudeMdEditor.tsx        # CLAUDE.md editor
+│   │   ├── FileDirectoryEditor.tsx   # Agents/Rules/Hooks editor
+│   │   ├── HooksUnifiedEditor.tsx   # Hook 통합 (스크립트 + 이벤트 연결)
+│   │   ├── EditorToolbar.tsx
+│   │   └── VersionHistory.tsx
+│   ├── project/
+│   │   └── ImportModal.tsx
+│   ├── ui/                           # shadcn/ui components
+│   ├── settings-form.tsx             # Settings form editor
+│   ├── settings-page.tsx             # Global/User settings page
+│   ├── sidebar.tsx
+│   ├── scope-badge.tsx
+│   └── json-editor.tsx
+├── lib/
+│   ├── db/
+│   │   ├── schema.ts                # DB schema (projects, settings, files, fileVersions)
+│   │   ├── index.ts
+│   │   └── migrate.ts
+│   ├── file-io/
+│   │   └── index.ts                 # Disk operations (read/write/list/detect)
+│   ├── settings-schema.ts           # ClaudeSettings type definitions
+│   └── utils.ts
+└── CLAUDE.md                         # 작업 규칙
+```
+
+---
+
+## 테스트 결과
+
+### API 테스트 (23/23 통과)
+- Agents CRUD: 16개 조회, 생성(201), 수정(200), 삭제(200)
+- Rules CRUD: 3개 조회, 생성/수정/삭제
+- Hooks CRUD: 15개 조회, 생성/수정/삭제
+- 보안: path traversal(400), 중복(409), 없는 파일(404), 없는 프로젝트(404)
+
+### Import/Export 전수조사 (10/10 통과)
+- 4개 스코프 Export → 디스크 valid JSON 확인
+- Round-trip (Export→Import) 데이터 동일성 확인
+- CLAUDE.md Export 정상
+- 빈 `{}` Export 차단 (404)
+- Invalid JSON 저장 차단 (400)
+- 이중 JSON 없음 확인
+
+### TypeScript 빌드
+- `tsc --noEmit` 에러 없음
+
+---
+
+## 발견 및 수정한 버그
+
+| # | 버그 | 원인 | 수정 |
+|---|------|------|------|
+| 1 | Import/Export scope 하드코딩 | `resolveFilePath("", "settings", "user")` 고정 | 실제 scope 파라미터 전달 |
+| 2 | Null query 버그 (project import) | `eq(settings.projectPath, ...)` null 비교 | `isNull()` 사용 |
+| 3 | res.ok 미체크 | 모든 fetch가 에러 무시 | res.ok 체크 + 에러 표시 |
+| 4 | loadProject() try/finally 누락 | 네트워크 에러 시 무한 스피너 | try/catch/finally 래핑 |
+| 5 | Scope 변경 시 설정 미갱신 | setState만 하고 loadSettings 안 함 | loadSettings(newScope) 호출 |
+| 6 | 사이드바 프로젝트 목록 미갱신 | useEffect `[]` 의존성 | `[pathname]` 변경 |
+| 7 | sees 프로젝트 path 공백 | `" /Users/min/..."` 앞 공백 | `.trim()` 자동 처리 |
+| 8 | Global/User 설정 분리 누락 | 한 파일로 합쳐버림 | 별도 스코프로 분리 |
+| 9 | settings.json 이중 JSON | Export 시 `{}` 선행 기록 | JSON 검증 + 빈값 차단 |
+| 10 | Export가 invalid JSON 허용 | catch에서 raw 그대로 기록 | parse 실패 시 500 반환 |
+
+---
+
+## sees 프로젝트 분석 결과
+
+### 에이전트 오케스트라 (16개 에이전트, 8단계)
+- Phase 1 (분석): A1~A5 — 데이터/코드/DB/기능/비교 분석
+- Phase 2 (기획): B1~B2 — 기획/UI 설계
+- Phase 3 (개발): C1~C2 — 백엔드/프론트엔드
+- Phase 4 (리뷰): D1~D3 — 코드/보안/검증
+- Phase 5 (배포): E1 — 배포
+- Phase 6 (테스트): F1~F3 — API/UI/회귀 테스트
+
+### 리더 폭주 사건
+- 리더 에이전트가 임의 코드 수정, 에이전트 80개+ 좀비 생성
+- 대응: block-leader-edit.sh, block-leader-team-create.sh 등 차단 훅 적용
+- 교훈: 에이전트 팀 모드에서 리더 권한 제한은 필수
+
+---
+
+## 설치한 패키지
+
+| 패키지 | 버전 | 용도 |
+|--------|------|------|
+| `@codemirror/legacy-modes` | ^6.5.2 | Shell/Bash 구문 강조 (hooks .sh 편집) |
+
+> 기존 패키지 (`next`, `drizzle-orm`, `better-sqlite3`, `@codemirror/lang-json`, `@codemirror/lang-markdown`, `@base-ui/react` 등)는 초기 커밋에 포함.
+
+---
+
+## git 변경 파일 목록
+
+### 신규 파일 (New)
+| 파일 | 설명 |
+|------|------|
+| `CLAUDE.md` | 프로젝트 작업 규칙 |
+| `docs/work-report.md` | 작업내역서 |
+| `src/app/api/projects/[id]/agents/route.ts` | Agents CRUD API |
+| `src/app/api/projects/[id]/rules/route.ts` | Rules CRUD API |
+| `src/app/api/projects/[id]/hooks/route.ts` | Hooks CRUD API |
+| `src/app/api/projects/[id]/settings/merged/route.ts` | Merged 4-scope API |
+| `src/app/api/projects/[id]/export/route.ts` | Project settings export |
+| `src/app/api/projects/[id]/export-claudemd/route.ts` | CLAUDE.md export |
+| `src/app/api/projects/[id]/import-settings/route.ts` | Project settings import |
+| `src/app/api/projects/[id]/import-claudemd/route.ts` | CLAUDE.md import |
+| `src/app/api/settings/export/route.ts` | Global/User settings export |
+| `src/app/api/settings/import/route.ts` | Global/User settings import |
+| `src/components/editors/FileDirectoryEditor.tsx` | Agents/Rules/Hooks split-pane 에디터 |
+| `src/components/editors/HooksUnifiedEditor.tsx` | Hook 통합 에디터 (Script/Inline 토글 + 이벤트 연결) |
+| `src/components/ui/badge.tsx` | Badge 컴포넌트 |
+| `src/components/ui/card.tsx` | Card 컴포넌트 |
+| `src/components/ui/dialog.tsx` | Dialog 컴포넌트 |
+| `src/components/ui/input.tsx` | Input 컴포넌트 |
+| `src/components/ui/label.tsx` | Label 컴포넌트 |
+| `src/components/ui/select.tsx` | Select 컴포넌트 |
+| `src/components/ui/separator.tsx` | Separator 컴포넌트 |
+| `src/components/ui/sheet.tsx` | Sheet 컴포넌트 |
+| `src/components/ui/switch.tsx` | Switch 컴포넌트 |
+| `src/components/ui/textarea.tsx` | Textarea 컴포넌트 |
+
+### 수정 파일 (Modified)
+| 파일 | 변경 내용 |
+|------|----------|
+| `package.json` / `package-lock.json` | @codemirror/legacy-modes 추가 |
+| `src/app/globals.css` | 스타일 수정 |
+| `src/app/page.tsx` | 홈 페이지 UI 개선 |
+| `src/app/projects/[id]/page.tsx` | Agents/Rules/Hooks 탭 추가, Merged 스코프 |
+| `src/app/projects/page.tsx` | 프로젝트 목록 UI |
+| `src/app/api/projects/route.ts` | path trim + 중복 체크 |
+| `src/app/api/projects/[id]/route.ts` | 프로젝트 CRUD |
+| `src/app/api/projects/[id]/settings/route.ts` | PUT JSON 검증 추가 |
+| `src/app/api/projects/[id]/files/[fileId]/route.ts` | 파일 CRUD |
+| `src/app/api/projects/[id]/import/route.ts` | import 개선 |
+| `src/app/api/settings/route.ts` | PUT JSON 검증 추가 |
+| `src/components/editors/CodeEditor.tsx` | Shell 구문 강조 추가 (StreamLanguage + legacy-modes) |
+| `src/components/editors/ClaudeMdEditor.tsx` | 스코프 + 버전 히스토리 |
+| `src/app/api/projects/[id]/import-settings/route.ts` | 404 시 다른 scope 파일 존재 힌트 추가 |
+| `src/components/editors/EditorToolbar.tsx` | 툴바 버튼 개선 |
+| `src/components/editors/VersionHistory.tsx` | 버전 히스토리 UI |
+| `src/components/project/ImportModal.tsx` | import 모달 |
+| `src/components/scope-badge.tsx` | 스코프 뱃지 |
+| `src/components/settings-form.tsx` | 설정 폼 에디터 |
+| `src/components/settings-page.tsx` | Global/User 설정 페이지 |
+| `src/components/sidebar.tsx` | 사이드바 네비게이션 |
+| `src/components/ui/Tabs.tsx` | 탭 컴포넌트 |
+| `src/lib/db/migrate.ts` | DB 마이그레이션 |
+| `src/lib/file-io/index.ts` | listDirectoryFiles, detectClaudeFiles 확장 |
+| `src/lib/settings-schema.ts` | UserPromptSubmit 이벤트 추가 |
+
+### 삭제 파일 (Deleted)
+| 파일 | 이유 |
+|------|------|
+| `src/components/editors/SettingsEditor.tsx` | settings-form.tsx로 통합, 미사용 |
+
+---
+
+## 설정값 / 상수 정의
+
+### `src/lib/settings-schema.ts`
+
+```typescript
+// Hook 이벤트 (6개)
+export const HOOK_EVENTS = [
+  "PreToolUse", "PostToolUse", "Notification",
+  "Stop", "SessionStart", "UserPromptSubmit",
+] as const;
+
+// 모델 옵션 (3개)
+export const MODEL_OPTIONS = [
+  { value: "claude-opus-4-6", label: "Claude Opus 4.6" },
+  { value: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
+  { value: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5" },
+] as const;
+
+// 샌드박스 타입 (2개)
+export const SANDBOX_TYPES = [
+  { value: "docker", label: "Docker" },
+  { value: "none", label: "None" },
+] as const;
+
+// 출력 형식 (3개)
+export const OUTPUT_FORMAT_OPTIONS = ["text", "json", "stream-json"] as const;
+```
+
+### `src/lib/file-io/index.ts` — 파일 경로 규칙
+
+| scope | type=settings | type=claude-md |
+|-------|--------------|----------------|
+| global | `~/.claude/settings.json` | — |
+| user | `~/.claude/settings.local.json` | `~/.claude/CLAUDE.md` |
+| project | `{path}/.claude/settings.json` | `{path}/CLAUDE.md` |
+| local | `{path}/.claude/settings.local.json` | `{path}/.claude/CLAUDE.local.md` |
+
+### `src/components/editors/FileDirectoryEditor.tsx` — 디렉토리 경로
+
+| type | 디렉토리 | 확장자 | 에디터 언어 |
+|------|----------|--------|------------|
+| agents | `{project}/.claude/agents/` | `.md` | markdown |
+| rules | `{project}/.claude/rules/` | `.md` | markdown |
+| hooks | `{project}/.claude/hooks/` | `.sh` | shell |
+
+---
+
+## 데이터 흐름
+
+### Settings Save (PUT) 경로
+```
+UI (Form/JSON 에디터)
+  → PUT /api/settings?scope=... 또는 PUT /api/projects/[id]/settings?scope=...
+  → body.config 파싱: string이면 그대로, object이면 JSON.stringify()
+  → JSON.parse(config) 검증 — 실패 시 400 반환
+  → DB upsert (scope + projectPath unique)
+  → 응답: 저장된 row 반환
+```
+
+### Settings Import (디스크 → DB) 경로
+```
+UI (Import 버튼)
+  → POST /api/settings/import?scope=... 또는 POST /api/projects/[id]/import-settings?scope=...
+  → resolveFilePath()로 디스크 경로 결정
+  → readFileContent()로 파일 읽기 — 없으면 404
+  → JSON.parse(content) — 실패 시 400
+  → JSON.stringify(parsed, null, 2) 정규화 (trailing data 제거, 포맷팅)
+  → DB upsert
+  → 응답: { success, path, scope }
+```
+
+### Settings Export (DB → 디스크) 경로
+```
+UI (Export 버튼)
+  → POST /api/settings/export?scope=... 또는 POST /api/projects/[id]/export?scope=...
+  → DB에서 row 조회
+  → config === "{}" 이면 404 (빈 설정 export 차단)
+  → JSON.parse(row.config) — 실패 시 500 (DB 오염 감지)
+  → JSON.stringify(parsed, null, 2) 정규화
+  → writeFileContent()로 디스크에 기록
+  → 응답: { success, path, scope }
+```
+
+### Agents/Rules/Hooks CRUD 경로
+```
+UI (FileDirectoryEditor)
+  ├─ GET /api/projects/[id]/agents → fs.readdirSync → 파일 목록 반환
+  ├─ POST (생성) → isValidName() 검증 → fileExists() 중복 체크(409) → mkdirSync → writeFileSync
+  ├─ PUT (수정) → 파일 읽기 → 내용 덮어쓰기
+  └─ DELETE → unlinkSync → 200
+```
+
+### Merged Settings 경로
+```
+GET /api/projects/[id]/settings/merged
+  → DB에서 4개 스코프 조회 (global, user, project, local)
+  → 순서대로 shallow merge (후순위가 덮어씀)
+  → permissions.allow/deny는 배열 합산 + Set 중복 제거
+  → 응답: { merged, sources: { global, user, project, local } }
+```
+
+---
+
+## [2차 작업] Hook 통합 관리 UI
+
+### 배경
+Settings 탭의 HookSection(matcher/command/timeout 폼)과 Hooks 탭의 FileDirectoryEditor(.sh 파일 편집)가 분리되어 있어서, 스크립트를 만들어도 hook 이벤트에 연결하려면 Settings 탭에서 JSON을 직접 수정해야 했음.
+
+### 구현 내용
+
+#### 신규 파일
+| 파일 | 설명 |
+|------|------|
+| `src/components/editors/HooksUnifiedEditor.tsx` | Hook 통합 에디터 (좌: 스크립트 편집, 우: 이벤트 연결) |
+
+#### 수정 파일
+| 파일 | 변경 |
+|------|------|
+| `src/components/editors/FileDirectoryEditor.tsx` | `onFilesChange` prop 추가 (스크립트 목록 상위 전달) |
+| `src/components/settings-form.tsx` | `hideHooks` prop 추가 (프로젝트 스코프에서 Hooks 카드 숨김) |
+| `src/app/projects/[id]/page.tsx` | Hooks 탭에 HooksUnifiedEditor 연결, Settings 탭 hideHooks, hooks 탭 진입 시 loadSettings 호출 |
+| `src/app/api/projects/[id]/import-settings/route.ts` | 404 에러 시 다른 scope 파일 존재 힌트 제공 |
+
+#### HooksUnifiedEditor 구조
+```
+┌──────────────────────┬──────────────────────────────────┐
+│  .sh 스크립트 편집    │  Hook 이벤트 연결 (Wiring)        │
+│  FileDirectoryEditor │  6개 이벤트 아코디언              │
+│  (기존 컴포넌트)      │  각 Rule: matcher + commands     │
+│                      │  각 Command: Script/Inline 토글  │
+│                      │  [Save Wiring] 버튼              │
+└──────────────────────┴──────────────────────────────────┘
+```
+
+#### CommandEntry — Script/Inline 토글
+- **Script 모드**: 드롭다운에서 .sh 파일 선택 → `{projectPath}/.claude/hooks/{filename}` 절대경로로 저장
+- **Inline 모드**: 텍스트 입력 (jq 파이프 등 인라인 명령)
+- **자동 감지**: command가 `{projectPath}/.claude/hooks/*.sh` 패턴이면 Script, 아니면 Inline
+
+#### 데이터 흐름
+```
+스크립트 생성:
+  FileDirectoryEditor → POST /api/projects/[id]/hooks → .sh 파일 생성
+  → onFilesChange 콜백 → HookWiringPanel 드롭다운 갱신
+
+이벤트 연결:
+  HookWiringPanel → Script 선택 → command = 절대경로
+  → Save Wiring → PUT /api/projects/[id]/settings → settings.hooks 업데이트
+  → onSettingsSaved → 부모 rawContent 동기화
+```
+
+### 발견/수정 버그 (2차)
+
+| # | 버그 | 원인 | 수정 |
+|---|------|------|------|
+| 11 | Hooks 탭 진입 시 settings 미로드 | `onValueChange`가 settings 탭만 처리 | hooks 탭도 `loadSettings` 호출 추가 |
+| 12 | Import 404 에러 메시지 불친절 | scope 불일치 시 파일 없다고만 표시 | 다른 scope 파일 존재 여부 힌트 추가 |
+
+---
+
+## 자체 점검 (CLAUDE.md 체크리스트)
+
+- [x] 프로젝트 개요 + 기술 스택
+- [x] DB 스키마 (테이블별 컬럼 명세)
+- [x] API 엔드포인트 전체 목록 (Method, Path, 설명)
+- [x] 페이지 구성 (URL별 기능 설명)
+- [x] UI 컴포넌트 목록 (파일명, 용도, props)
+- [x] 파일 구조 트리
+- [x] 구현 기능 상세 (기능별 동작 설명)
+- [x] 보안/에러 처리 내역
+- [x] 발견/수정한 버그 목록
+- [x] 테스트 결과 (증거)
+- [x] 설치한 패키지 목록
+- [x] git 변경 파일 목록 (신규 24 / 수정 25 / 삭제 1)
+- [x] 설정값/템플릿/상수 정의 내용
+- [x] 데이터 흐름 설명 (Import/Export/Save 경로)
+- [x] 빠진 항목 스스로 점검 후 보완 ← 이 항목
+
+---
+
+*작성일: 2026-04-12*

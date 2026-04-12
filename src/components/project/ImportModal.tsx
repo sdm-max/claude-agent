@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import Modal from "../ui/Modal";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
 
 interface DetectedFile {
   type: string;
@@ -23,89 +25,100 @@ export default function ImportModal({ projectId, open, onClose, onImported }: Pr
   const [scanning, setScanning] = useState(false);
   const [importing, setImporting] = useState(false);
   const [scanned, setScanned] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const scan = async () => {
     setScanning(true);
+    setError(null);
     try {
       const res = await fetch(`/api/projects/${projectId}/import`, { method: "POST" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error || `Scan failed (${res.status})`);
+        return;
+      }
       const data = await res.json();
       setFiles(data.files || []);
       setSelected(new Set(data.files?.map((_: unknown, i: number) => i) || []));
       setScanned(true);
-    } finally {
-      setScanning(false);
-    }
+    } catch {
+      setError("Failed to connect to server");
+    } finally { setScanning(false); }
   };
 
   const doImport = async () => {
     setImporting(true);
+    setError(null);
     try {
       const selectedFiles = files.filter((_, i) => selected.has(i));
-      await fetch(`/api/projects/${projectId}/import`, {
+      const res = await fetch(`/api/projects/${projectId}/import`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ files: selectedFiles }),
       });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error || `Import failed (${res.status})`);
+        return;
+      }
       onImported();
       onClose();
-    } finally {
-      setImporting(false);
-    }
+    } catch {
+      setError("Import failed");
+    } finally { setImporting(false); }
   };
 
   const toggle = (i: number) => {
     const next = new Set(selected);
-    if (next.has(i)) next.delete(i);
-    else next.add(i);
+    if (next.has(i)) next.delete(i); else next.add(i);
     setSelected(next);
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="파일 임포트">
-      {!scanned ? (
-        <div className="space-y-4">
-          <p className="text-sm text-[var(--text-muted)]">
-            프로젝트 경로를 스캔하여 Claude 설정 파일을 찾습니다.
-          </p>
-          <button
-            onClick={scan}
-            disabled={scanning}
-            className="w-full py-2 rounded bg-[var(--accent)] hover:bg-[var(--accent-hover)] disabled:opacity-50 text-white text-sm"
-          >
-            {scanning ? "스캔 중..." : "스캔 시작"}
-          </button>
-        </div>
-      ) : files.length === 0 ? (
-        <p className="text-sm text-[var(--text-muted)]">발견된 파일이 없습니다.</p>
-      ) : (
-        <div className="space-y-4">
-          <div className="max-h-60 overflow-y-auto space-y-1">
-            {files.map((f, i) => (
-              <label key={i} className="flex items-center gap-2 p-2 rounded hover:bg-[var(--bg-input)] cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={selected.has(i)}
-                  onChange={() => toggle(i)}
-                  className="accent-[var(--accent)]"
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm truncate">{f.path}</div>
-                  <div className="text-xs text-[var(--text-muted)]">
-                    {f.type} · {f.scope} · {f.content.length} chars
-                  </div>
-                </div>
-              </label>
-            ))}
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Import Files</DialogTitle>
+        </DialogHeader>
+
+        {error && (
+          <div className="p-3 rounded-lg bg-destructive/10 text-destructive text-sm">{error}</div>
+        )}
+
+        {!scanned ? (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">Scan the project path for Claude configuration files.</p>
+            <Button onClick={scan} disabled={scanning} className="w-full">
+              {scanning ? "Scanning..." : "Start Scan"}
+            </Button>
           </div>
-          <button
-            onClick={doImport}
-            disabled={importing || selected.size === 0}
-            className="w-full py-2 rounded bg-[var(--accent)] hover:bg-[var(--accent-hover)] disabled:opacity-50 text-white text-sm"
-          >
-            {importing ? "임포트 중..." : `선택한 ${selected.size}개 파일 임포트`}
-          </button>
-        </div>
-      )}
-    </Modal>
+        ) : files.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No files found.</p>
+        ) : (
+          <div className="space-y-4">
+            <div className="max-h-60 overflow-y-auto space-y-1">
+              {files.map((f, i) => (
+                <label key={i} className="flex items-center gap-2 p-2 rounded hover:bg-muted cursor-pointer">
+                  <input type="checkbox" checked={selected.has(i)} onChange={() => toggle(i)} className="accent-primary" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm truncate">{f.path}</div>
+                    <div className="flex gap-1 mt-0.5">
+                      <Badge variant="outline" className="text-xs">{f.type}</Badge>
+                      <Badge variant="secondary" className="text-xs">{f.scope}</Badge>
+                      <span className="text-xs text-muted-foreground">{f.content.length} chars</span>
+                    </div>
+                  </div>
+                </label>
+              ))}
+            </div>
+            <DialogFooter>
+              <Button onClick={doImport} disabled={importing || selected.size === 0} className="w-full sm:w-auto">
+                {importing ? "Importing..." : `Import ${selected.size} file(s)`}
+              </Button>
+            </DialogFooter>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

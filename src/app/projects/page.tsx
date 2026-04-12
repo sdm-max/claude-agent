@@ -2,8 +2,14 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import Modal from "@/components/ui/Modal";
-import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
 
 interface Project {
   id: string;
@@ -45,12 +51,8 @@ export default function ProjectsPage() {
 
   useEffect(() => { loadProjects(); }, []);
 
-  // Validate path on change
   useEffect(() => {
-    if (!formPath.trim()) {
-      setPathValidation(null);
-      return;
-    }
+    if (!formPath.trim()) { setPathValidation(null); return; }
     const timeout = setTimeout(async () => {
       setValidating(true);
       try {
@@ -60,59 +62,35 @@ export default function ProjectsPage() {
           body: JSON.stringify({ path: formPath }),
         });
         setPathValidation(await res.json());
-      } catch {
-        setPathValidation(null);
-      } finally {
-        setValidating(false);
-      }
+      } catch { setPathValidation(null); }
+      finally { setValidating(false); }
     }, 300);
     return () => clearTimeout(timeout);
   }, [formPath]);
 
   const filtered = projects.filter(
-    (p) =>
-      p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.path.toLowerCase().includes(search.toLowerCase())
+    (p) => p.name.toLowerCase().includes(search.toLowerCase()) || p.path.toLowerCase().includes(search.toLowerCase())
   );
 
   const openCreate = () => {
-    setEditingId(null);
-    setFormName("");
-    setFormPath("");
-    setFormDesc("");
-    setPathValidation(null);
-    setModalOpen(true);
+    setEditingId(null); setFormName(""); setFormPath(""); setFormDesc(""); setPathValidation(null); setModalOpen(true);
   };
 
   const openEdit = (p: Project) => {
-    setEditingId(p.id);
-    setFormName(p.name);
-    setFormPath(p.path);
-    setFormDesc(p.description || "");
-    setModalOpen(true);
+    setEditingId(p.id); setFormName(p.name); setFormPath(p.path); setFormDesc(p.description || ""); setModalOpen(true);
   };
 
   const saveProject = async () => {
     setFormSaving(true);
     try {
       if (editingId) {
-        await fetch(`/api/projects/${editingId}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: formName, path: formPath, description: formDesc }),
-        });
+        await fetch(`/api/projects/${editingId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: formName, path: formPath, description: formDesc }) });
       } else {
-        await fetch("/api/projects", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: formName, path: formPath, description: formDesc }),
-        });
+        await fetch("/api/projects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: formName, path: formPath, description: formDesc }) });
       }
       setModalOpen(false);
       loadProjects();
-    } finally {
-      setFormSaving(false);
-    }
+    } finally { setFormSaving(false); }
   };
 
   const deleteProject = async () => {
@@ -126,100 +104,86 @@ export default function ProjectsPage() {
     <div className="p-8">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Projects</h1>
-        <button
-          onClick={openCreate}
-          className="px-4 py-2 rounded bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white text-sm"
-        >
-          New Project
-        </button>
+        <Button onClick={openCreate}>New Project</Button>
       </div>
 
-      <input
-        className="input-base mb-4"
-        placeholder="Search projects..."
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-      />
+      <Input className="mb-4" placeholder="Search projects..." value={search} onChange={(e) => setSearch(e.target.value)} />
 
       {loading ? (
-        <p className="text-[var(--text-muted)]">Loading...</p>
+        <p className="text-muted-foreground">Loading...</p>
       ) : filtered.length === 0 ? (
-        <p className="text-center py-12 text-[var(--text-muted)]">No projects found.</p>
+        <p className="text-center py-12 text-muted-foreground">No projects found.</p>
       ) : (
         <div className="space-y-2">
           {filtered.map((p) => (
-            <div
-              key={p.id}
-              className="flex items-center gap-4 p-4 rounded-lg border border-[var(--border)] bg-[var(--bg-card)]"
-            >
-              <Link href={`/projects/${p.id}`} className="flex-1 min-w-0">
-                <div className="font-medium">{p.name}</div>
-                <div className="text-sm text-[var(--text-muted)] truncate">{p.path}</div>
-                {p.description && (
-                  <div className="text-sm text-[var(--text-muted)] mt-1">{p.description}</div>
-                )}
-              </Link>
-              <div className="text-sm text-[var(--text-muted)]">{p.fileCount} files</div>
-              <button onClick={() => openEdit(p)} className="px-3 py-1 text-sm rounded border border-[var(--border)] hover:bg-[var(--bg-input)]">
-                Edit
-              </button>
-              <button onClick={() => setDeleteId(p.id)} className="px-3 py-1 text-sm rounded border border-red-800 text-red-400 hover:bg-red-900/20">
-                Delete
-              </button>
-            </div>
+            <Card key={p.id} size="sm">
+              <CardContent>
+                <div className="flex items-center gap-4">
+                  <Link href={`/projects/${p.id}`} className="flex-1 min-w-0">
+                    <div className="font-medium">{p.name}</div>
+                    <div className="text-sm text-muted-foreground truncate">{p.path}</div>
+                    {p.description && <div className="text-sm text-muted-foreground mt-1">{p.description}</div>}
+                  </Link>
+                  <div className="text-sm text-muted-foreground">{p.fileCount} files</div>
+                  <Button variant="outline" size="sm" onClick={() => openEdit(p)}>Edit</Button>
+                  <Button variant="destructive" size="sm" onClick={() => setDeleteId(p.id)}>Delete</Button>
+                </div>
+              </CardContent>
+            </Card>
           ))}
         </div>
       )}
 
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editingId ? "Edit Project" : "New Project"}>
-        <div className="space-y-3">
-          <div>
-            <label className="block text-sm text-[var(--text-muted)] mb-1">Name</label>
-            <input className="input-base" value={formName} onChange={(e) => setFormName(e.target.value)} />
+      {/* Create/Edit Dialog */}
+      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editingId ? "Edit Project" : "New Project"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>Name</Label>
+              <Input className="mt-1" value={formName} onChange={(e) => setFormName(e.target.value)} />
+            </div>
+            <div>
+              <Label>Path</Label>
+              <Input className="mt-1" value={formPath} onChange={(e) => setFormPath(e.target.value)} placeholder="/Users/..." />
+              {validating && <p className="text-xs text-muted-foreground mt-1">Validating path...</p>}
+              {pathValidation && !validating && (
+                <div className="mt-1 space-y-0.5">
+                  {!pathValidation.exists && <p className="text-xs text-yellow-400">Path does not exist</p>}
+                  {pathValidation.exists && !pathValidation.isDirectory && <p className="text-xs text-yellow-400">Path is not a directory</p>}
+                  {pathValidation.exists && pathValidation.isDirectory && <p className="text-xs text-green-400">Valid directory</p>}
+                  {pathValidation.hasClaudeDir && <p className="text-xs text-green-400">.claude/ directory found</p>}
+                </div>
+              )}
+            </div>
+            <div>
+              <Label>Description</Label>
+              <Textarea className="mt-1" value={formDesc} onChange={(e) => setFormDesc(e.target.value)} rows={2} />
+            </div>
           </div>
-          <div>
-            <label className="block text-sm text-[var(--text-muted)] mb-1">Path</label>
-            <input className="input-base" value={formPath} onChange={(e) => setFormPath(e.target.value)} placeholder="/Users/..." />
-            {validating && <p className="text-xs text-[var(--text-muted)] mt-1">Validating path...</p>}
-            {pathValidation && !validating && (
-              <div className="mt-1 space-y-0.5">
-                {!pathValidation.exists && (
-                  <p className="text-xs text-[var(--warning)]">Path does not exist</p>
-                )}
-                {pathValidation.exists && !pathValidation.isDirectory && (
-                  <p className="text-xs text-[var(--warning)]">Path is not a directory</p>
-                )}
-                {pathValidation.exists && pathValidation.isDirectory && (
-                  <p className="text-xs text-[var(--success)]">Valid directory</p>
-                )}
-                {pathValidation.hasClaudeDir && (
-                  <p className="text-xs text-[var(--success)]">.claude/ directory found</p>
-                )}
-              </div>
-            )}
-          </div>
-          <div>
-            <label className="block text-sm text-[var(--text-muted)] mb-1">Description</label>
-            <textarea className="input-base" value={formDesc} onChange={(e) => setFormDesc(e.target.value)} rows={2} />
-          </div>
-          <button
-            onClick={saveProject}
-            disabled={!formName || !formPath || formSaving}
-            className="w-full py-2 rounded bg-[var(--accent)] hover:bg-[var(--accent-hover)] disabled:opacity-50 text-white text-sm"
-          >
-            {formSaving ? "Saving..." : "Save"}
-          </button>
-        </div>
-      </Modal>
+          <DialogFooter>
+            <Button onClick={saveProject} disabled={!formName || !formPath || formSaving} className="w-full sm:w-auto">
+              {formSaving ? "Saving..." : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-      <ConfirmDialog
-        open={!!deleteId}
-        title="Delete Project"
-        message="This will delete the project and all its settings. Continue?"
-        confirmLabel="Delete"
-        onConfirm={deleteProject}
-        onCancel={() => setDeleteId(null)}
-      />
+      {/* Delete Confirm Dialog */}
+      <Dialog open={!!deleteId} onOpenChange={(open) => { if (!open) setDeleteId(null); }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete Project</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">This will delete the project and all its settings. Continue?</p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteId(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={deleteProject}>Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

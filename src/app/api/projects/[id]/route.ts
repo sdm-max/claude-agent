@@ -33,7 +33,7 @@ export async function PUT(request: NextRequest, { params }: Params) {
   db.update(projects)
     .set({
       name: body.name ?? existing.name,
-      path: body.path ?? existing.path,
+      path: body.path ? body.path.trim().replace(/\/+$/, "") : existing.path,
       description: body.description ?? existing.description,
       updatedAt: Date.now(),
     })

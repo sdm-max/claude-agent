@@ -1,0 +1,20 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getTemplateById } from "@/lib/templates";
+
+// GET /api/templates/[id]
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  const template = getTemplateById(id);
+
+  if (!template) {
+    return NextResponse.json({ error: "Template not found" }, { status: 404 });
+  }
+
+  return NextResponse.json({
+    ...template,
+    settingsJson: JSON.stringify(template.settings, null, 2),
+  });
+}

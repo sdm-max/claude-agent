@@ -1,18 +1,27 @@
 "use client";
 
 import { useState } from "react";
-import type { ClaudeSettings, HookRule, HookCommand, McpServerConfig, HookEvent } from "@/lib/settings-schema";
-import { MODEL_OPTIONS, SANDBOX_TYPES, HOOK_EVENTS } from "@/lib/settings-schema";
+import type { ClaudeSettings, HookRule, McpServerConfig, HookEvent } from "@/lib/settings-schema";
+import { MODEL_OPTIONS, HOOK_EVENTS, OUTPUT_FORMAT_OPTIONS } from "@/lib/settings-schema";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 
 interface Props {
   settings: ClaudeSettings;
   onChange: (settings: ClaudeSettings) => void;
+  hideHooks?: boolean;
 }
 
-export default function SettingsForm({ settings, onChange }: Props) {
+export default function SettingsForm({ settings, onChange, hideHooks }: Props) {
   const update = (patch: Partial<ClaudeSettings>) => {
     const next = { ...settings, ...patch };
-    // Clean up empty values
     for (const [k, v] of Object.entries(next)) {
       if (v === undefined || v === "" || (Array.isArray(v) && v.length === 0)) {
         delete next[k as keyof ClaudeSettings];
@@ -22,161 +31,194 @@ export default function SettingsForm({ settings, onChange }: Props) {
   };
 
   return (
-    <div className="overflow-y-auto p-4 space-y-6">
+    <div className="overflow-y-auto p-4 space-y-4">
       {/* General */}
-      <Section title="General">
-        <Field label="Model">
-          <select
-            className="input-base"
-            value={settings.model || ""}
-            onChange={(e) => update({ model: e.target.value || undefined })}
-          >
-            <option value="">Default</option>
-            {MODEL_OPTIONS.map((m) => (
-              <option key={m.value} value={m.value}>{m.label}</option>
-            ))}
-          </select>
-        </Field>
-        <Field label="System Prompt">
-          <textarea
-            className="input-base min-h-[80px]"
-            value={settings.systemPrompt || ""}
-            onChange={(e) => update({ systemPrompt: e.target.value || undefined })}
-            placeholder="Custom system prompt..."
-          />
-        </Field>
-        <Field label="Max Turns">
-          <input
-            type="number"
-            className="input-base w-32"
-            value={settings.maxTurns ?? ""}
-            onChange={(e) => update({ maxTurns: e.target.value ? Number(e.target.value) : undefined })}
-            placeholder="Unlimited"
-            min={1}
-          />
-        </Field>
-        <Field label="API Key">
-          <input
-            type="password"
-            className="input-base"
-            value={settings.apiKey || ""}
-            onChange={(e) => update({ apiKey: e.target.value || undefined })}
-            placeholder="sk-ant-..."
-          />
-        </Field>
-      </Section>
+      <Card size="sm">
+        <CardHeader><CardTitle>General</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          <div>
+            <Label>Model</Label>
+            <Select
+              value={settings.model || ""}
+              onValueChange={(v) => update({ model: v || undefined })}
+            >
+              <SelectTrigger className="mt-1 w-full">
+                <SelectValue placeholder="Default" />
+              </SelectTrigger>
+              <SelectContent>
+                {MODEL_OPTIONS.map((m) => (
+                  <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>System Prompt</Label>
+            <Textarea
+              className="mt-1"
+              value={settings.systemPrompt || ""}
+              onChange={(e) => update({ systemPrompt: e.target.value || undefined })}
+              placeholder="Custom system prompt..."
+            />
+          </div>
+          <div>
+            <Label>Max Turns</Label>
+            <Input
+              type="number"
+              className="mt-1 w-32"
+              value={settings.maxTurns ?? ""}
+              onChange={(e) => update({ maxTurns: e.target.value ? Number(e.target.value) : undefined })}
+              placeholder="Unlimited"
+              min={1}
+            />
+          </div>
+          <div>
+            <Label>API Key</Label>
+            <Input
+              type="password"
+              className="mt-1"
+              value={settings.apiKey || ""}
+              onChange={(e) => update({ apiKey: e.target.value || undefined })}
+              placeholder="sk-ant-..."
+            />
+          </div>
+          <div>
+            <Label>Working Directory</Label>
+            <Input
+              type="text"
+              className="mt-1"
+              value={settings.workDir || ""}
+              onChange={(e) => update({ workDir: e.target.value || undefined })}
+              placeholder="/path/to/dir"
+            />
+          </div>
+          <div>
+            <Label>Max Tokens</Label>
+            <Input
+              type="number"
+              className="mt-1 w-32"
+              value={settings.maxTokens ?? ""}
+              onChange={(e) => update({ maxTokens: e.target.value ? Number(e.target.value) : undefined })}
+              placeholder="Unlimited"
+              min={1}
+            />
+          </div>
+          <div>
+            <Label>Temperature</Label>
+            <Input
+              type="number"
+              className="mt-1 w-32"
+              value={settings.temperature ?? ""}
+              onChange={(e) => update({ temperature: e.target.value ? Number(e.target.value) : undefined })}
+              placeholder="Default"
+              step="0.1"
+              min={0}
+              max={2}
+            />
+          </div>
+          <div>
+            <Label>Output Format</Label>
+            <Select
+              value={settings.outputFormat || ""}
+              onValueChange={(v) => update({ outputFormat: (v as typeof OUTPUT_FORMAT_OPTIONS[number]) || undefined })}
+            >
+              <SelectTrigger className="mt-1 w-48">
+                <SelectValue placeholder="Default" />
+              </SelectTrigger>
+              <SelectContent>
+                {OUTPUT_FORMAT_OPTIONS.map((fmt) => (
+                  <SelectItem key={fmt} value={fmt}>{fmt}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Permissions */}
-      <Section title="Permissions">
-        <TagArrayField
-          label="Allow"
-          value={settings.permissions?.allow || []}
-          onChange={(allow) => update({ permissions: { ...settings.permissions, allow } })}
-          placeholder="e.g. Bash(git*), Read"
-        />
-        <TagArrayField
-          label="Deny"
-          value={settings.permissions?.deny || []}
-          onChange={(deny) => update({ permissions: { ...settings.permissions, deny } })}
-          placeholder="e.g. Bash(rm*)"
-        />
-      </Section>
+      <Card size="sm">
+        <CardHeader><CardTitle>Permissions</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          <TagArrayField
+            label="Allow"
+            value={settings.permissions?.allow || []}
+            onChange={(allow) => update({ permissions: { ...settings.permissions, allow } })}
+            placeholder="e.g. Bash(git*), Read"
+          />
+          <Separator />
+          <TagArrayField
+            label="Deny"
+            value={settings.permissions?.deny || []}
+            onChange={(deny) => update({ permissions: { ...settings.permissions, deny } })}
+            placeholder="e.g. Bash(rm*)"
+          />
+        </CardContent>
+      </Card>
 
       {/* Environment */}
-      <Section title="Environment Variables">
-        <KeyValueEditor
-          value={settings.env || {}}
-          onChange={(env) => update({ env: Object.keys(env).length > 0 ? env : undefined })}
-        />
-      </Section>
+      <Card size="sm">
+        <CardHeader><CardTitle>Environment Variables</CardTitle></CardHeader>
+        <CardContent>
+          <KeyValueEditor
+            value={settings.env || {}}
+            onChange={(env) => update({ env: Object.keys(env).length > 0 ? env : undefined })}
+          />
+        </CardContent>
+      </Card>
 
       {/* Hooks */}
-      <Section title="Hooks">
-        {HOOK_EVENTS.map((event) => (
-          <HookSection
-            key={event}
-            event={event}
-            rules={settings.hooks?.[event] || []}
-            onChange={(rules) => {
-              const hooks = { ...settings.hooks };
-              if (rules.length > 0) {
-                hooks[event] = rules;
-              } else {
-                delete hooks[event];
-              }
-              update({ hooks: Object.keys(hooks).length > 0 ? hooks : undefined });
-            }}
-          />
-        ))}
-      </Section>
+      {!hideHooks && (
+        <Card size="sm">
+          <CardHeader><CardTitle>Hooks</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            {HOOK_EVENTS.map((event) => (
+              <HookSection
+                key={event}
+                event={event}
+                rules={settings.hooks?.[event] || []}
+                onChange={(rules) => {
+                  const hooks = { ...settings.hooks };
+                  if (rules.length > 0) { hooks[event] = rules; } else { delete hooks[event]; }
+                  update({ hooks: Object.keys(hooks).length > 0 ? hooks : undefined });
+                }}
+              />
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Sandbox */}
-      <Section title="Sandbox">
-        <Field label="Type">
-          <select
-            className="input-base w-48"
-            value={settings.sandbox?.type || ""}
-            onChange={(e) => {
-              const type = e.target.value as "docker" | "none" | "";
-              if (!type) {
-                update({ sandbox: undefined });
-              } else {
-                update({ sandbox: { ...settings.sandbox, type } });
-              }
-            }}
-          >
-            <option value="">Not set</option>
-            {SANDBOX_TYPES.map((s) => (
-              <option key={s.value} value={s.value}>{s.label}</option>
-            ))}
-          </select>
-        </Field>
-        {settings.sandbox?.type === "docker" && (
-          <Field label="Container">
-            <input
-              className="input-base"
-              value={settings.sandbox?.container || ""}
-              onChange={(e) => update({
-                sandbox: { ...settings.sandbox, container: e.target.value || undefined },
-              })}
-              placeholder="Container name"
+      <Card size="sm">
+        <CardHeader><CardTitle>Sandbox</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-center gap-3">
+            <Label>Enabled</Label>
+            <Switch
+              checked={settings.sandbox?.enabled ?? false}
+              onCheckedChange={(v) => {
+                if (!v) { update({ sandbox: undefined }); }
+                else { update({ sandbox: { ...settings.sandbox, enabled: true } }); }
+              }}
             />
-          </Field>
-        )}
-      </Section>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* MCP Servers */}
-      <Section title="MCP Servers">
-        <McpServersEditor
-          value={settings.mcpServers || {}}
-          onChange={(mcpServers) => update({
-            mcpServers: Object.keys(mcpServers).length > 0 ? mcpServers : undefined,
-          })}
-        />
-      </Section>
+      <Card size="sm">
+        <CardHeader><CardTitle>MCP Servers</CardTitle></CardHeader>
+        <CardContent>
+          <McpServersEditor
+            value={settings.mcpServers || {}}
+            onChange={(mcpServers) => update({ mcpServers: Object.keys(mcpServers).length > 0 ? mcpServers : undefined })}
+          />
+        </CardContent>
+      </Card>
     </div>
   );
 }
 
 // --- Sub-components ---
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="border border-[var(--border)] rounded-lg p-4">
-      <h3 className="text-sm font-semibold mb-3 text-[var(--text)]">{title}</h3>
-      <div className="space-y-3">{children}</div>
-    </div>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="block text-xs text-[var(--text-muted)] mb-1">{label}</label>
-      {children}
-    </div>
-  );
-}
 
 function TagArrayField({ label, value, onChange, placeholder }: {
   label: string; value: string[]; onChange: (v: string[]) => void; placeholder?: string;
@@ -184,25 +226,20 @@ function TagArrayField({ label, value, onChange, placeholder }: {
   const [input, setInput] = useState("");
   return (
     <div>
-      <label className="block text-xs text-[var(--text-muted)] mb-1">{label}</label>
-      <div className="flex flex-wrap gap-1 mb-1">
+      <Label className="mb-1">{label}</Label>
+      <div className="flex flex-wrap gap-1 mb-2">
         {value.map((item, i) => (
-          <span key={i} className="px-2 py-0.5 bg-[var(--bg-input)] border border-[var(--border)] rounded text-xs flex items-center gap-1">
+          <Badge key={i} variant="secondary" className="gap-1">
             {item}
-            <button onClick={() => onChange(value.filter((_, j) => j !== i))} className="text-[var(--text-muted)] hover:text-[var(--danger)]">&times;</button>
-          </span>
+            <button onClick={() => onChange(value.filter((_, j) => j !== i))} className="text-muted-foreground hover:text-destructive ml-0.5">&times;</button>
+          </Badge>
         ))}
       </div>
-      <input
-        className="input-base text-xs"
+      <Input
         value={input}
         onChange={(e) => setInput(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === "Enter" && input.trim()) {
-            e.preventDefault();
-            onChange([...value, input.trim()]);
-            setInput("");
-          }
+          if (e.key === "Enter" && input.trim()) { e.preventDefault(); onChange([...value, input.trim()]); setInput(""); }
         }}
         placeholder={placeholder || "Type and press Enter"}
       />
@@ -217,45 +254,24 @@ function KeyValueEditor({ value, onChange }: {
   const [val, setVal] = useState("");
   const entries = Object.entries(value);
 
-  const add = () => {
-    if (key.trim()) {
-      onChange({ ...value, [key.trim()]: val });
-      setKey("");
-      setVal("");
-    }
-  };
+  const add = () => { if (key.trim()) { onChange({ ...value, [key.trim()]: val }); setKey(""); setVal(""); } };
 
   return (
     <div>
       {entries.map(([k, v]) => (
         <div key={k} className="flex items-center gap-2 mb-1">
-          <span className="text-xs font-mono px-2 py-1 bg-[var(--bg-input)] rounded">{k}</span>
-          <span className="text-xs text-[var(--text-muted)]">=</span>
+          <Badge variant="outline" className="font-mono">{k}</Badge>
+          <span className="text-xs text-muted-foreground">=</span>
           <span className="text-xs font-mono flex-1 truncate">{v}</span>
-          <button
-            onClick={() => {
-              const next = { ...value };
-              delete next[k];
-              onChange(next);
-            }}
-            className="text-xs text-[var(--text-muted)] hover:text-[var(--danger)]"
-          >
+          <Button variant="ghost" size="icon-xs" onClick={() => { const next = { ...value }; delete next[k]; onChange(next); }}>
             &times;
-          </button>
+          </Button>
         </div>
       ))}
-      <div className="flex gap-1 mt-1">
-        <input className="input-base text-xs w-32" value={key} onChange={(e) => setKey(e.target.value)} placeholder="KEY" />
-        <input
-          className="input-base text-xs flex-1"
-          value={val}
-          onChange={(e) => setVal(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }}
-          placeholder="VALUE"
-        />
-        <button onClick={add} className="px-2 py-1 text-xs rounded bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)]">
-          Add
-        </button>
+      <div className="flex gap-1 mt-2">
+        <Input className="w-32" value={key} onChange={(e) => setKey(e.target.value)} placeholder="KEY" />
+        <Input className="flex-1" value={val} onChange={(e) => setVal(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }} placeholder="VALUE" />
+        <Button variant="outline" size="sm" onClick={add}>Add</Button>
       </div>
     </div>
   );
@@ -264,87 +280,52 @@ function KeyValueEditor({ value, onChange }: {
 function HookSection({ event, rules, onChange }: {
   event: HookEvent; rules: HookRule[]; onChange: (rules: HookRule[]) => void;
 }) {
-  const addRule = () => {
-    onChange([...rules, { hooks: [{ type: "command", command: "" }] }]);
-  };
-
-  const updateRule = (index: number, rule: HookRule) => {
-    const next = [...rules];
-    next[index] = rule;
-    onChange(next);
-  };
-
-  const removeRule = (index: number) => {
-    onChange(rules.filter((_, i) => i !== index));
-  };
+  const addRule = () => { onChange([...rules, { hooks: [{ type: "command", command: "" }] }]); };
+  const updateRule = (index: number, rule: HookRule) => { const next = [...rules]; next[index] = rule; onChange(next); };
+  const removeRule = (index: number) => { onChange(rules.filter((_, i) => i !== index)); };
 
   return (
-    <div className="border border-[var(--border)] rounded p-3">
+    <div className="rounded-lg border border-border p-3">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-semibold">{event}</span>
-        <button onClick={addRule} className="text-xs px-2 py-0.5 rounded bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)]">
-          + Rule
-        </button>
+        <Label>{event}</Label>
+        <Button variant="outline" size="xs" onClick={addRule}>+ Rule</Button>
       </div>
-      {rules.length === 0 && (
-        <p className="text-xs text-[var(--text-muted)]">No rules configured</p>
-      )}
+      {rules.length === 0 && <p className="text-xs text-muted-foreground">No rules configured</p>}
       {rules.map((rule, i) => (
-        <div key={i} className="mb-2 p-2 bg-[var(--bg)] rounded border border-[var(--border)]">
+        <div key={i} className="mb-2 p-2 bg-muted/30 rounded-md border border-border">
           <div className="flex items-center gap-2 mb-1">
-            <label className="text-xs text-[var(--text-muted)]">Matcher:</label>
-            <input
-              className="input-base text-xs flex-1"
+            <Label className="text-xs shrink-0">Matcher:</Label>
+            <Input
+              className="flex-1"
               value={rule.matcher || ""}
               onChange={(e) => updateRule(i, { ...rule, matcher: e.target.value || undefined })}
               placeholder="Tool name pattern (optional)"
             />
-            <button onClick={() => removeRule(i)} className="text-xs text-[var(--danger)]">&times;</button>
+            <Button variant="ghost" size="icon-xs" onClick={() => removeRule(i)} className="text-destructive">&times;</Button>
           </div>
           {rule.hooks.map((hook, hi) => (
             <div key={hi} className="flex items-center gap-2 mt-1">
-              <input
-                className="input-base text-xs flex-1"
-                value={hook.command}
-                onChange={(e) => {
-                  const hooks = [...rule.hooks];
-                  hooks[hi] = { ...hook, command: e.target.value };
-                  updateRule(i, { ...rule, hooks });
-                }}
+              <Input
+                className="flex-1"
+                value={hook.type === "command" ? hook.command : ""}
+                onChange={(e) => { const hooks = [...rule.hooks]; hooks[hi] = { type: "command", command: e.target.value, timeout: hook.timeout }; updateRule(i, { ...rule, hooks }); }}
                 placeholder="Shell command"
               />
-              <input
+              <Input
                 type="number"
-                className="input-base text-xs w-20"
+                className="w-20"
                 value={hook.timeout ?? ""}
-                onChange={(e) => {
-                  const hooks = [...rule.hooks];
-                  hooks[hi] = { ...hook, timeout: e.target.value ? Number(e.target.value) : undefined };
-                  updateRule(i, { ...rule, hooks });
-                }}
+                onChange={(e) => { const hooks = [...rule.hooks]; hooks[hi] = { ...hook, timeout: e.target.value ? Number(e.target.value) : undefined }; updateRule(i, { ...rule, hooks }); }}
                 placeholder="Timeout"
               />
               {rule.hooks.length > 1 && (
-                <button
-                  onClick={() => {
-                    const hooks = rule.hooks.filter((_, j) => j !== hi);
-                    updateRule(i, { ...rule, hooks });
-                  }}
-                  className="text-xs text-[var(--text-muted)] hover:text-[var(--danger)]"
-                >
-                  &times;
-                </button>
+                <Button variant="ghost" size="icon-xs" onClick={() => { const hooks = rule.hooks.filter((_, j) => j !== hi); updateRule(i, { ...rule, hooks }); }}>&times;</Button>
               )}
             </div>
           ))}
-          <button
-            onClick={() => {
-              updateRule(i, { ...rule, hooks: [...rule.hooks, { type: "command", command: "" }] });
-            }}
-            className="text-xs text-[var(--accent)] mt-1 hover:underline"
-          >
+          <Button variant="link" size="xs" className="mt-1 p-0 h-auto" onClick={() => { updateRule(i, { ...rule, hooks: [...rule.hooks, { type: "command", command: "" }] }); }}>
             + Command
-          </button>
+          </Button>
         </div>
       ))}
     </div>
@@ -352,74 +333,42 @@ function HookSection({ event, rules, onChange }: {
 }
 
 function McpServersEditor({ value, onChange }: {
-  value: Record<string, McpServerConfig>;
-  onChange: (v: Record<string, McpServerConfig>) => void;
+  value: Record<string, McpServerConfig>; onChange: (v: Record<string, McpServerConfig>) => void;
 }) {
   const [newName, setNewName] = useState("");
   const entries = Object.entries(value);
 
-  const addServer = () => {
-    if (newName.trim() && !value[newName.trim()]) {
-      onChange({ ...value, [newName.trim()]: { command: "" } });
-      setNewName("");
-    }
-  };
-
-  const updateServer = (name: string, config: McpServerConfig) => {
-    onChange({ ...value, [name]: config });
-  };
-
-  const removeServer = (name: string) => {
-    const next = { ...value };
-    delete next[name];
-    onChange(next);
-  };
+  const addServer = () => { if (newName.trim() && !value[newName.trim()]) { onChange({ ...value, [newName.trim()]: { command: "" } }); setNewName(""); } };
+  const updateServer = (name: string, config: McpServerConfig) => { onChange({ ...value, [name]: config }); };
+  const removeServer = (name: string) => { const next = { ...value }; delete next[name]; onChange(next); };
 
   return (
     <div>
       {entries.map(([name, config]) => (
-        <div key={name} className="mb-3 p-3 bg-[var(--bg)] rounded border border-[var(--border)]">
+        <div key={name} className="mb-3 p-3 bg-muted/30 rounded-md border border-border">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold font-mono">{name}</span>
-            <button onClick={() => removeServer(name)} className="text-xs text-[var(--danger)]">&times;</button>
+            <Badge variant="outline" className="font-mono">{name}</Badge>
+            <Button variant="ghost" size="icon-xs" onClick={() => removeServer(name)} className="text-destructive">&times;</Button>
           </div>
-          <Field label="Command">
-            <input
-              className="input-base text-xs"
-              value={config.command}
-              onChange={(e) => updateServer(name, { ...config, command: e.target.value })}
-              placeholder="npx -y @modelcontextprotocol/..."
-            />
-          </Field>
-          <div className="mt-2">
-            <label className="block text-xs text-[var(--text-muted)] mb-1">Args</label>
-            <TagArrayField
-              label=""
-              value={config.args || []}
-              onChange={(args) => updateServer(name, { ...config, args: args.length > 0 ? args : undefined })}
-              placeholder="Add argument"
-            />
-          </div>
-          <div className="mt-2">
-            <label className="block text-xs text-[var(--text-muted)] mb-1">Environment</label>
-            <KeyValueEditor
-              value={config.env || {}}
-              onChange={(env) => updateServer(name, { ...config, env: Object.keys(env).length > 0 ? env : undefined })}
-            />
+          <div className="space-y-2">
+            <div>
+              <Label className="text-xs">Command</Label>
+              <Input className="mt-1" value={config.command} onChange={(e) => updateServer(name, { ...config, command: e.target.value })} placeholder="npx -y @modelcontextprotocol/..." />
+            </div>
+            <div>
+              <Label className="text-xs">Args</Label>
+              <TagArrayField label="" value={config.args || []} onChange={(args) => updateServer(name, { ...config, args: args.length > 0 ? args : undefined })} placeholder="Add argument" />
+            </div>
+            <div>
+              <Label className="text-xs">Environment</Label>
+              <KeyValueEditor value={config.env || {}} onChange={(env) => updateServer(name, { ...config, env: Object.keys(env).length > 0 ? env : undefined })} />
+            </div>
           </div>
         </div>
       ))}
       <div className="flex gap-1 mt-2">
-        <input
-          className="input-base text-xs flex-1"
-          value={newName}
-          onChange={(e) => setNewName(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addServer(); } }}
-          placeholder="Server name"
-        />
-        <button onClick={addServer} className="px-3 py-1 text-xs rounded bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)]">
-          Add Server
-        </button>
+        <Input className="flex-1" value={newName} onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addServer(); } }} placeholder="Server name" />
+        <Button variant="outline" size="sm" onClick={addServer}>Add Server</Button>
       </div>
     </div>
   );

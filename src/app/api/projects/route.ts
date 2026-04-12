@@ -27,13 +27,21 @@ export async function GET() {
 // POST /api/projects — create project
 export async function POST(request: NextRequest) {
   const body = await request.json();
-  const { name, path: projectPath, description } = body;
+  const { name, path: rawPath, description } = body;
 
-  if (!name || !projectPath) {
+  if (!name || !rawPath) {
     return NextResponse.json({ error: "name and path are required" }, { status: 400 });
   }
 
+  const projectPath = rawPath.trim().replace(/\/+$/, "");
+
   const db = getDb();
+
+  const existing = db.select().from(projects).where(eq(projects.path, projectPath)).get();
+  if (existing) {
+    return NextResponse.json({ error: "A project with this path already exists" }, { status: 409 });
+  }
+
   const now = Date.now();
   const id = nanoid();
 

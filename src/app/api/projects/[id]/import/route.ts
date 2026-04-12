@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { projects, files } from "@/lib/db/schema";
-import { eq, and } from "drizzle-orm";
+import { projects, files, settings } from "@/lib/db/schema";
+import { eq, and, isNull } from "drizzle-orm";
 import { detectClaudeFiles } from "@/lib/file-io";
 import { nanoid } from "nanoid";
 
@@ -67,6 +67,33 @@ export async function PUT(request: NextRequest, { params }: Params) {
       }).run();
     }
     imported++;
+
+    // Sync settings-type files to settings table
+    if (f.type === "settings") {
+      const scope = f.scope; // 'user' | 'project' | 'local'
+      const projectPath = scope === "user" ? null : project.path;
+
+      const existingSetting = db
+        .select()
+        .from(settings)
+        .where(
+          projectPath
+            ? and(eq(settings.scope, scope), eq(settings.projectPath, projectPath))
+            : and(eq(settings.scope, scope), isNull(settings.projectPath))
+        )
+        .get();
+
+      if (existingSetting) {
+        db.update(settings)
+          .set({ config: f.content, updatedAt: now })
+          .where(eq(settings.id, existingSetting.id))
+          .run();
+      } else {
+        db.insert(settings)
+          .values({ scope, projectPath, config: f.content, createdAt: now, updatedAt: now })
+          .run();
+      }
+    }
   }
 
   return NextResponse.json({ imported });

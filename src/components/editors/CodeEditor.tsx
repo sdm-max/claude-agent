@@ -6,11 +6,13 @@ import { EditorState } from "@codemirror/state";
 import { markdown } from "@codemirror/lang-markdown";
 import { json } from "@codemirror/lang-json";
 import { oneDark } from "@codemirror/theme-one-dark";
+import { StreamLanguage } from "@codemirror/language";
+import { shell } from "@codemirror/legacy-modes/mode/shell";
 
 interface Props {
   value: string;
   onChange: (value: string) => void;
-  language?: "markdown" | "json";
+  language?: "markdown" | "json" | "shell";
   readOnly?: boolean;
 }
 
@@ -23,13 +25,13 @@ export default function CodeEditor({ value, onChange, language = "markdown", rea
   useEffect(() => {
     if (!containerRef.current) return;
 
-    const langExt = language === "json" ? json() : markdown();
+    const langExt = language === "json" ? json() : language === "shell" ? StreamLanguage.define(shell) : markdown();
 
     const state = EditorState.create({
       doc: value,
       extensions: [
         basicSetup,
-        langExt,
+        ...(langExt ? [langExt] : []),
         oneDark,
         EditorView.theme({
           "&": { height: "100%", fontSize: "14px" },

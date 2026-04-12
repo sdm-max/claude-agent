@@ -14,6 +14,7 @@
     "@codemirror/commands": "^6.10.3",
     "@codemirror/lang-json": "^6.0.1",
     "@codemirror/lang-markdown": "^6.3.2",
+    "@codemirror/legacy-modes": "^6.5.2",
     "@codemirror/lint": "^6.9.5",
     "@codemirror/search": "^6.6.0",
     "@codemirror/state": "^6.5.2",

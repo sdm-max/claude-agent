@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 
 interface Project {
   id: string;
@@ -20,11 +22,11 @@ export default function Sidebar() {
       .then((r) => r.json())
       .then((data) => setProjects(data))
       .catch(() => {});
-  }, []);
+  }, [pathname]);
 
   return (
-    <nav className="w-56 shrink-0 bg-[var(--bg-card)] border-r border-[var(--border)] p-4 flex flex-col gap-0.5 overflow-y-auto">
-      <Link href="/" className="text-lg font-bold mb-6 px-2 hover:text-[var(--accent)] transition-colors">
+    <nav className="w-56 shrink-0 bg-card border-r border-border p-3 flex flex-col gap-1 overflow-y-auto">
+      <Link href="/" className="text-lg font-bold mb-4 px-2 hover:text-primary transition-colors">
         Claude Settings
       </Link>
 
@@ -36,7 +38,16 @@ export default function Sidebar() {
         User
       </NavLink>
 
-      <SectionLabel className="mt-4">Projects</SectionLabel>
+      <Separator className="my-2" />
+
+      <SectionLabel>Templates</SectionLabel>
+      <NavLink href="/templates" active={pathname === "/templates"}>
+        Settings Matrix
+      </NavLink>
+
+      <Separator className="my-2" />
+
+      <SectionLabel>Projects</SectionLabel>
       {projects.map((p) => (
         <NavLink
           key={p.id}
@@ -46,16 +57,18 @@ export default function Sidebar() {
           <span className="truncate">{p.name}</span>
         </NavLink>
       ))}
-      <NavLink href="/projects" active={pathname === "/projects"}>
-        <span className="text-[var(--text-muted)]">+ New Project</span>
-      </NavLink>
+      <Link href="/projects">
+        <Button variant="ghost" size="sm" className="w-full justify-start text-muted-foreground">
+          + New Project
+        </Button>
+      </Link>
     </nav>
   );
 }
 
-function SectionLabel({ children, className }: { children: React.ReactNode; className?: string }) {
+function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className={cn("px-2 py-1 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider", className)}>
+    <div className="px-2 py-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
       {children}
     </div>
   );
@@ -63,16 +76,14 @@ function SectionLabel({ children, className }: { children: React.ReactNode; clas
 
 function NavLink({ href, active, children }: { href: string; active: boolean; children: React.ReactNode }) {
   return (
-    <Link
-      href={href}
-      className={cn(
-        "px-3 py-1.5 rounded text-sm transition-colors flex items-center",
-        active
-          ? "bg-[var(--bg-input)] text-[var(--accent)]"
-          : "hover:bg-[var(--bg-input)] text-[var(--text)]"
-      )}
-    >
-      {children}
+    <Link href={href}>
+      <Button
+        variant={active ? "secondary" : "ghost"}
+        size="sm"
+        className={cn("w-full justify-start", active && "text-primary")}
+      >
+        {children}
+      </Button>
     </Link>
   );
 }

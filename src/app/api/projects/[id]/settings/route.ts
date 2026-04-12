@@ -50,6 +50,13 @@ export async function PUT(request: NextRequest, { params }: Params) {
 
   const body = await request.json();
   const config = typeof body.config === "string" ? body.config : JSON.stringify(body.config);
+
+  try {
+    JSON.parse(config);
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON in config" }, { status: 400 });
+  }
+
   const now = Date.now();
 
   const existing = db
