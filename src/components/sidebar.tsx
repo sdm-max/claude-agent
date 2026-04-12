@@ -2,10 +2,24 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import {
+  Shield,
+  Lock,
+  Webhook,
+  BookOpen,
+  Plug,
+  FileText,
+  GitBranch,
+  Bot,
+  Zap,
+  Cpu,
+  Terminal,
+  Monitor,
+} from "lucide-react";
 
 interface Project {
   id: string;
@@ -13,9 +27,27 @@ interface Project {
   path: string;
 }
 
+const templateCategories = [
+  { key: "security", nameKo: "보안 가드", icon: Shield },
+  { key: "permissions", nameKo: "권한 설정", icon: Lock },
+  { key: "hooks", nameKo: "훅 엔지니어", icon: Webhook },
+  { key: "skills", nameKo: "스킬 아키텍트", icon: BookOpen },
+  { key: "mcp", nameKo: "MCP 통합", icon: Plug },
+  { key: "claude-md", nameKo: "CLAUDE.md", icon: FileText },
+  { key: "cicd", nameKo: "CI/CD 자동화", icon: GitBranch },
+  { key: "agents", nameKo: "에이전트", icon: Bot },
+  { key: "model", nameKo: "모델 설정", icon: Cpu },
+  { key: "env", nameKo: "환경변수", icon: Terminal },
+  { key: "ui", nameKo: "UI / UX", icon: Monitor },
+  { key: "optimization", nameKo: "최적화", icon: Zap },
+];
+
 export default function Sidebar() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [projects, setProjects] = useState<Project[]>([]);
+
+  const activeCategory = searchParams.get("category") || "security";
 
   useEffect(() => {
     fetch("/api/projects")
@@ -41,9 +73,20 @@ export default function Sidebar() {
       <Separator className="my-2" />
 
       <SectionLabel>Templates</SectionLabel>
-      <NavLink href="/templates" active={pathname === "/templates"}>
-        Settings Matrix
-      </NavLink>
+      {templateCategories.map((cat) => {
+        const isActive = pathname === "/templates" && activeCategory === cat.key;
+        const Icon = cat.icon;
+        return (
+          <NavLink
+            key={cat.key}
+            href={`/templates?category=${cat.key}`}
+            active={isActive}
+          >
+            <Icon className="size-3.5 shrink-0" />
+            <span className="truncate">{cat.nameKo}</span>
+          </NavLink>
+        );
+      })}
 
       <Separator className="my-2" />
 
@@ -80,7 +123,7 @@ function NavLink({ href, active, children }: { href: string; active: boolean; ch
       <Button
         variant={active ? "secondary" : "ghost"}
         size="sm"
-        className={cn("w-full justify-start", active && "text-primary")}
+        className={cn("w-full justify-start gap-1.5", active && "text-primary")}
       >
         {children}
       </Button>

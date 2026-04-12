@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   Card,
   CardContent,
@@ -11,7 +12,6 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
@@ -21,18 +21,6 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
-  Shield,
-  Lock,
-  Webhook,
-  BookOpen,
-  Plug,
-  FileText,
-  GitBranch,
-  Bot,
-  Zap,
-  Cpu,
-  Terminal,
-  Monitor,
   Copy,
   Check,
   CheckSquare,
@@ -79,21 +67,6 @@ interface Project {
   path: string;
 }
 
-const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
-  Shield,
-  Lock,
-  Webhook,
-  BookOpen,
-  Plug,
-  FileText,
-  GitBranch,
-  Bot,
-  Zap,
-  Cpu,
-  Terminal,
-  Monitor,
-};
-
 const SCOPES = [
   { value: "global", label: "Global" },
   { value: "user", label: "User" },
@@ -109,28 +82,15 @@ const difficultyColors = [
   "text-orange-400",
 ];
 
-const categoryOrder = [
-  "security",
-  "permissions",
-  "hooks",
-  "skills",
-  "mcp",
-  "claude-md",
-  "cicd",
-  "agents",
-  "model",
-  "env",
-  "ui",
-  "optimization",
-];
-
 export default function TemplatesPage() {
+  const searchParams = useSearchParams();
+  const activeCategory = searchParams.get("category") || "security";
+
   const [templates, setTemplates] = useState<TemplateSummary[]>([]);
   const [categories, setCategories] = useState<Record<string, CategoryInfo>>(
     {}
   );
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<string>("security");
 
   // Multi-select
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -302,51 +262,24 @@ export default function TemplatesPage() {
     );
   }
 
+  const catInfo = categories[activeCategory];
+  const items = grouped[activeCategory] || [];
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
-      <div className="px-6 pt-6 pb-0">
-        <h1 className="text-2xl font-bold">Settings Templates</h1>
+      <div className="px-6 pt-6 pb-4 border-b border-border">
+        <h1 className="text-2xl font-bold">
+          {catInfo?.nameKo || "Templates"}
+        </h1>
         <p className="text-sm text-muted-foreground mt-1">
-          12 categories. Select multiple to mix & apply to any scope.
+          {items.length} templates. Select multiple to mix & apply to any scope.
         </p>
       </div>
 
-      {/* Tabs */}
-      <Tabs
-        value={activeTab}
-        onValueChange={(val) => setActiveTab(val as string)}
-        className="flex-1 flex flex-col overflow-hidden"
-      >
-        <div className="px-6 pt-4 border-b border-border">
-          <TabsList variant="line" className="gap-0">
-            {categoryOrder.map((cat) => {
-              const info = categories[cat];
-              if (!info) return null;
-              const IconComp = iconMap[info.icon];
-              const count = grouped[cat]?.length || 0;
-              return (
-                <TabsTrigger key={cat} value={cat} className="gap-1.5 px-3">
-                  {IconComp && <IconComp className="size-4" />}
-                  <span>{info.nameKo}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {count}
-                  </span>
-                </TabsTrigger>
-              );
-            })}
-          </TabsList>
-        </div>
-
-        {categoryOrder.map((cat) => {
-          const items = grouped[cat];
-          if (!items) return null;
-          return (
-            <TabsContent
-              key={cat}
-              value={cat}
-              className="flex-1 overflow-y-auto p-6 pb-32"
-            >
+      {/* Cards */}
+      <div className="flex-1 overflow-y-auto p-6 pb-32">
+        {items.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
                 {items.map((t) => {
                   const isSelected = selected.has(t.id);
@@ -429,10 +362,12 @@ export default function TemplatesPage() {
                   );
                 })}
               </div>
-            </TabsContent>
-          );
-        })}
-      </Tabs>
+        ) : (
+          <div className="text-center text-muted-foreground py-12">
+            No templates in this category.
+          </div>
+        )}
+      </div>
 
       {/* Bottom Apply Bar */}
       {selected.size > 0 && (
