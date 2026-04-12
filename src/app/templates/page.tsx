@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   Shield,
+  Lock,
   Webhook,
   BookOpen,
   Plug,
@@ -29,6 +30,9 @@ import {
   GitBranch,
   Bot,
   Zap,
+  Cpu,
+  Terminal,
+  Monitor,
   Copy,
   Check,
   CheckSquare,
@@ -77,6 +81,7 @@ interface Project {
 
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   Shield,
+  Lock,
   Webhook,
   BookOpen,
   Plug,
@@ -84,6 +89,9 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   GitBranch,
   Bot,
   Zap,
+  Cpu,
+  Terminal,
+  Monitor,
 };
 
 const SCOPES = [
@@ -103,12 +111,16 @@ const difficultyColors = [
 
 const categoryOrder = [
   "security",
+  "permissions",
   "hooks",
   "skills",
   "mcp",
   "claude-md",
   "cicd",
   "agents",
+  "model",
+  "env",
+  "ui",
   "optimization",
 ];
 
@@ -296,7 +308,7 @@ export default function TemplatesPage() {
       <div className="px-6 pt-6 pb-0">
         <h1 className="text-2xl font-bold">Settings Templates</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          8 category templates. Select multiple to mix & apply to any scope.
+          12 categories. Select multiple to mix & apply to any scope.
         </p>
       </div>
 
