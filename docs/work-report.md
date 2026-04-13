@@ -1128,3 +1128,52 @@ $ npx tsx -e 'parseReferenceSection 테스트'
 
 *긴급 수정 완료일: 2026-04-13*
 
+---
+
+# 추가 수정 — 루트 CLAUDE.md Rules 탭 노출 (2026-04-13)
+
+## 문제
+사용자가 프로젝트 루트에 `CLAUDE.md` 를 만들어도 앱의 Rules 탭 어디에도 표시되지 않음. 앱은 `.claude/rules/*.md` 만 스캔했고, Claude Code 공식 규약상 정식 프로젝트 메모리 파일인 루트 `CLAUDE.md` 는 UI 편집 경로가 없었음. 에이전트 `referenceFiles` 기본값이 `"CLAUDE.md"` 로 설정되어 있어 불일치가 혼란을 유발.
+
+## 변경 사항
+### API (`src/app/api/projects/[id]/rules/route.ts`)
+- GET: 루트 `CLAUDE.md` 존재 시 `pinned: true` 항목으로 리스트 최상단에 prepend
+- PUT: `name=CLAUDE.md` + `pinned=true` → 루트 파일에 쓰기, 아니면 기존 `.claude/rules/` 경로 유지
+- POST: 루트 `CLAUDE.md` 중복 생성 시 409
+- DELETE: 루트 `CLAUDE.md` 는 UI 삭제 금지 (403)
+- `.claude/rules/CLAUDE.md` 와 루트 둘 다 있으면 console.warn
+
+### UI (`src/components/editors/FileDirectoryEditor.tsx`)
+- `FileEntry` 에 `pinned?: boolean` 필드 추가
+- 파일 리스트 pinned 그룹(📌 "Project Memory" 서브헤더)과 일반 그룹 분리 렌더
+- pinned 항목은 삭제 버튼 숨김 + 삭제 시도 시 한국어 안내
+- PUT/DELETE 요청에 `pinned` 플래그 자동 전파
+
+## 검증 증거
+```bash
+# GET — pinned 항목이 최상단에
+$ curl .../api/projects/slU6UiJ0Gmptwv5j2htvt/rules
+[{"name":"CLAUDE.md","content":"# 규칙\n- 증거 없이 답변 금지...","pinned":true}]
+
+# PUT — 루트 파일이 실제로 갱신, .claude/rules/ 생성 안 됨
+$ curl -X PUT .../rules -d '{"name":"CLAUDE.md","pinned":true,"content":"..."}'
+{"name":"CLAUDE.md","content":"...","pinned":true}
+$ ls /Users/min/Documents/test-ref-agent/.claude
+ls: No such file or directory   ← rules 폴더 자동생성 안 됨 (정상)
+
+# DELETE — pinned 거부
+$ curl -X DELETE ".../rules?name=CLAUDE.md&pinned=true"
+{"error":"Root CLAUDE.md cannot be deleted from the UI — it is the project memory file"}
+
+# POST — 중복 거부
+$ curl -X POST .../rules -d '{"name":"CLAUDE.md","pinned":true,"content":"dup"}'
+{"error":"Root CLAUDE.md already exists"}
+```
+
+`npx tsc --noEmit` 통과.
+
+## 파일 변경 목록
+- 수정: `src/app/api/projects/[id]/rules/route.ts`
+- 수정: `src/components/editors/FileDirectoryEditor.tsx`
+- 수정: `docs/work-report.md`
+

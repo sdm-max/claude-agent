@@ -72,6 +72,7 @@ INPUT=$(cat)
 interface FileEntry {
   name: string;
   content: string;
+  pinned?: boolean;
 }
 
 interface Props {
@@ -170,12 +171,13 @@ export default function FileDirectoryEditor({
   // ── Save ─────────────────────────────────────────────────────────────────
   const save = async () => {
     if (!selectedName) return;
+    const selected = files.find((f) => f.name === selectedName);
     setSaving(true);
     try {
       const res = await fetch(apiBase, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: selectedName, content }),
+        body: JSON.stringify({ name: selectedName, content, pinned: selected?.pinned }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -234,6 +236,11 @@ export default function FileDirectoryEditor({
 
   // ── Delete file ──────────────────────────────────────────────────────────
   const deleteFile = async (name: string) => {
+    const entry = files.find((f) => f.name === name);
+    if (entry?.pinned) {
+      alert("프로젝트 메모리 파일(CLAUDE.md)은 UI에서 삭제할 수 없습니다");
+      return;
+    }
     if (!confirm(`Delete "${name}"?`)) return;
     let res: Response;
     try {
@@ -289,34 +296,60 @@ export default function FileDirectoryEditor({
               No files yet
             </p>
           )}
-          {files.map((file) => {
-            const isActive = file.name === selectedName;
-            return (
-              <div
-                key={file.name}
-                className={`group flex items-center justify-between px-3 py-1.5 cursor-pointer ${
-                  isActive
-                    ? "bg-secondary text-primary"
-                    : "hover:bg-accent text-foreground"
-                }`}
-                onClick={() => selectFile(file.name)}
-              >
-                <span className="text-xs truncate min-w-0 flex-1 font-mono">
-                  {file.name}
-                </span>
-                <button
-                  className="ml-1 shrink-0 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity text-sm leading-none"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    deleteFile(file.name);
-                  }}
-                  title={`Delete ${file.name}`}
+          {(() => {
+            const pinnedFiles = files.filter((f) => f.pinned);
+            const regularFiles = files.filter((f) => !f.pinned);
+            const renderRow = (file: FileEntry) => {
+              const isActive = file.name === selectedName;
+              return (
+                <div
+                  key={file.name}
+                  className={`group flex items-center justify-between px-3 py-1.5 cursor-pointer ${
+                    isActive
+                      ? "bg-secondary text-primary"
+                      : "hover:bg-accent text-foreground"
+                  }`}
+                  onClick={() => selectFile(file.name)}
+                  title={file.pinned ? "Project memory (root CLAUDE.md)" : undefined}
                 >
-                  ×
-                </button>
-              </div>
+                  <span className="text-xs truncate min-w-0 flex-1 font-mono">
+                    {file.pinned ? "📌 " : ""}
+                    {file.name}
+                  </span>
+                  {!file.pinned && (
+                    <button
+                      className="ml-1 shrink-0 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity text-sm leading-none"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteFile(file.name);
+                      }}
+                      title={`Delete ${file.name}`}
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              );
+            };
+            return (
+              <>
+                {pinnedFiles.length > 0 && (
+                  <>
+                    <div className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Project Memory
+                    </div>
+                    {pinnedFiles.map(renderRow)}
+                    {regularFiles.length > 0 && (
+                      <div className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        {typeLabel}
+                      </div>
+                    )}
+                  </>
+                )}
+                {regularFiles.map(renderRow)}
+              </>
             );
-          })}
+          })()}
         </div>
       </div>
 
