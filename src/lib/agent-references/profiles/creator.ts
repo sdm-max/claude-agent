@@ -35,6 +35,7 @@ export const creatorProfiles: GovernanceProfile[] = [
 2. 컨벤션에 맞는 새 파일 생성
 3. 생성한 파일 목록 보고`,
     lockedFields: ["disallowedTools"],
+    referenceFiles: ["CLAUDE.md"],
   },
   {
     id: "creator-scoped",
@@ -139,6 +140,7 @@ export const creatorProfiles: GovernanceProfile[] = [
 3. 테스트 재실행 → 동일 결과 확인
 4. 작은 단위로 커밋 가능한 상태 유지`,
     lockedFields: ["isolation"],
+    referenceFiles: ["CLAUDE.md", "docs/coding-standards.md"],
   },
   {
     id: "creator-ui-component",
@@ -176,6 +178,7 @@ export const creatorProfiles: GovernanceProfile[] = [
 3. 새 컴포넌트 생성 (tsx + 타입)
 4. 스토리북/테스트 필요 시 함께 생성`,
     lockedFields: ["disallowedTools"],
+    referenceFiles: ["CLAUDE.md", "docs/design-system.md"],
   },
   {
     id: "creator-api-endpoint",
@@ -213,6 +216,7 @@ export const creatorProfiles: GovernanceProfile[] = [
 3. 라우트 핸들러 작성
 4. 인증/권한 미들웨어 적용
 5. 테스트 생성 및 실행`,
+    referenceFiles: ["CLAUDE.md", "docs/api-conventions.md"],
   },
   {
     id: "creator-full",
@@ -249,5 +253,6 @@ export const creatorProfiles: GovernanceProfile[] = [
 4. 테스트 실행 (npm test)
 5. 변경 내역 보고`,
     lockedFields: ["disallowedTools"],
+    referenceFiles: ["CLAUDE.md"],
   },
 ];

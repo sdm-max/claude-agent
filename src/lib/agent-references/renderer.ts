@@ -95,12 +95,29 @@ function renderBody(template: string, vars: Record<string, string>): string {
 }
 
 /**
+ * 참조 파일 목록을 body 상단에 삽입할 "## 참조 문서" 섹션으로 렌더링.
+ * Claude Code의 `@path` 자동 로드 기능을 사용.
+ */
+function renderReferenceSection(referenceFiles: string[]): string {
+  if (!referenceFiles || referenceFiles.length === 0) return "";
+  const lines = ["## 참조 문서 (자동 로드)"];
+  for (const file of referenceFiles) {
+    const trimmed = file.trim();
+    if (!trimmed) continue;
+    const path = trimmed.startsWith("@") ? trimmed : `@${trimmed}`;
+    lines.push(path);
+  }
+  return lines.join("\n") + "\n\n";
+}
+
+/**
  * GovernanceProfile + 사용자 입력 이름 → 완성된 .md 파일 내용
  */
 export function renderAgentMd(
   profile: GovernanceProfile,
   agentName: string,
-  overrides?: Partial<AgentFrontmatter>
+  overrides?: Partial<AgentFrontmatter>,
+  referenceFiles?: string[]
 ): string {
   const frontmatter: AgentFrontmatter = {
     ...profile.frontmatter,
@@ -109,7 +126,22 @@ export function renderAgentMd(
   };
 
   const yaml = renderFrontmatter(frontmatter);
-  const body = renderBody(profile.bodyTemplate, { name: agentName });
+  const refs = referenceFiles ?? profile.referenceFiles ?? [];
+  const refSection = renderReferenceSection(refs);
+  const rawBody = renderBody(profile.bodyTemplate, { name: agentName });
+
+  // 첫 번째 `# 제목` 라인 뒤에 참조 섹션 삽입
+  let body: string;
+  if (refSection) {
+    const match = rawBody.match(/^(#[^\n]*\n\n?)([\s\S]*)$/);
+    if (match) {
+      body = `${match[1]}${refSection}${match[2]}`;
+    } else {
+      body = `${refSection}${rawBody}`;
+    }
+  } else {
+    body = rawBody;
+  }
 
   return `${yaml}\n\n${body}\n`;
 }

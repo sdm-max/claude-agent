@@ -56,6 +56,7 @@ export const executorProfiles: GovernanceProfile[] = [
 3. 결과 검증
 4. 성공/실패 보고`,
     lockedFields: ["isolation", "model", "disallowedTools"],
+    referenceFiles: ["CLAUDE.md"],
   },
   {
     id: "executor-db-migrator",
@@ -111,6 +112,7 @@ export const executorProfiles: GovernanceProfile[] = [
 5. 마이그레이션 실행
 6. 검증 쿼리로 결과 확인`,
     lockedFields: ["isolation", "hooks", "model"],
+    referenceFiles: ["CLAUDE.md", "docs/db-migration-guide.md"],
   },
   {
     id: "executor-deployer",
@@ -149,6 +151,7 @@ export const executorProfiles: GovernanceProfile[] = [
 4. 프로덕션 배포 (canary/blue-green)
 5. 헬스 체크 및 메트릭 모니터링
 6. 이상 감지 시 자동 롤백`,
+    referenceFiles: ["CLAUDE.md", "docs/deployment.md"],
   },
   {
     id: "executor-sandboxed",
@@ -192,5 +195,6 @@ export const executorProfiles: GovernanceProfile[] = [
         },
       },
     },
+    referenceFiles: ["CLAUDE.md"],
   },
 ];

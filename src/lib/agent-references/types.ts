@@ -48,6 +48,12 @@ export interface GovernanceProfile {
   companionSettings?: Partial<ClaudeSettings>;
   allowedCallTargets?: string[];
   lockedFields?: (keyof AgentFrontmatter)[];
+  /**
+   * 에이전트 실행 시 자동으로 컨텍스트에 로드할 참조 파일 경로.
+   * 렌더 시 body 상단에 "## 참조 문서" 섹션으로 `@path` 형식으로 주입됨.
+   * 프로젝트 루트 기준 상대 경로 사용.
+   */
+  referenceFiles?: string[];
 }
 
 // ─── Category Metadata ───

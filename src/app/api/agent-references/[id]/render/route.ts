@@ -11,9 +11,10 @@ export async function POST(
 ) {
   const { id } = await params;
   const body = await request.json();
-  const { agentName, overrides } = body as {
+  const { agentName, overrides, referenceFiles } = body as {
     agentName: string;
     overrides?: Partial<AgentFrontmatter>;
+    referenceFiles?: string[];
   };
 
   // 이름 검증
@@ -50,12 +51,13 @@ export async function POST(
   // 잠금 필드 경고
   const lockedWarnings = overrides ? checkLockedFieldChanges(profile, overrides) : [];
 
-  // 렌더링
-  const md = renderAgentMd(profile, agentName, overrides);
+  // 렌더링 (참조 파일은 명시적 override가 있으면 그것, 없으면 프로필 기본값)
+  const md = renderAgentMd(profile, agentName, overrides, referenceFiles);
 
   return NextResponse.json({
     md,
     warnings: [...fmErrors.filter((e) => e.severity === "warning"), ...lockedWarnings],
     companionSettings: profile.companionSettings ?? null,
+    defaultReferenceFiles: profile.referenceFiles ?? [],
   });
 }

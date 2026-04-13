@@ -38,6 +38,7 @@ export const researcherProfiles: GovernanceProfile[] = [
 3. 핵심 포인트 요약
 4. 출처 URL 포함 보고`,
     lockedFields: ["tools", "disallowedTools", "background"],
+    referenceFiles: ["CLAUDE.md"],
   },
   {
     id: "researcher-library-evaluator",
@@ -80,6 +81,7 @@ export const researcherProfiles: GovernanceProfile[] = [
 - 비교 표 (라이브러리 × 기준)
 - 시나리오별 추천
 - 마이그레이션 비용 추정`,
+    referenceFiles: ["package.json"],
   },
   {
     id: "researcher-rfc-drafter",
@@ -118,6 +120,7 @@ export const researcherProfiles: GovernanceProfile[] = [
 5. **Impact** — 영향 범위 (코드, 팀, 운영)
 6. **Open Questions** — 미해결 질문
 7. **Migration Plan** — 단계별 이행 계획`,
+    referenceFiles: ["CLAUDE.md", "docs/architecture.md"],
   },
   {
     id: "researcher-deep",
@@ -161,5 +164,6 @@ export const researcherProfiles: GovernanceProfile[] = [
 - 권장사항 (근거 포함)
 - 참고 자료 링크`,
     lockedFields: ["tools", "disallowedTools"],
+    referenceFiles: ["CLAUDE.md"],
   },
 ];

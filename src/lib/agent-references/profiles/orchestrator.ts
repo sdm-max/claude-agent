@@ -49,6 +49,7 @@ export const orchestratorProfiles: GovernanceProfile[] = [
 - 종합 권장사항`,
     lockedFields: ["model", "tools", "disallowedTools"],
     allowedCallTargets: ["readonly-*", "researcher-*"],
+    referenceFiles: ["CLAUDE.md"],
   },
   {
     id: "orchestrator-feature-builder",
@@ -92,6 +93,7 @@ export const orchestratorProfiles: GovernanceProfile[] = [
 [커스터마이즈: 대상 기능과 품질 기준을 기술]`,
     lockedFields: ["model", "tools", "disallowedTools"],
     allowedCallTargets: ["readonly-*", "creator-*", "researcher-*"],
+    referenceFiles: ["CLAUDE.md", "docs/architecture.md"],
   },
   {
     id: "orchestrator-release-manager",
@@ -138,6 +140,7 @@ export const orchestratorProfiles: GovernanceProfile[] = [
 [커스터마이즈: 릴리스 전략(canary/blue-green)과 환경을 기술]`,
     lockedFields: ["model", "tools", "disallowedTools"],
     allowedCallTargets: ["readonly-*", "executor-*", "devops-*", "researcher-*"],
+    referenceFiles: ["CLAUDE.md", "docs/release-process.md"],
   },
   {
     id: "orchestrator-incident-response",
@@ -182,6 +185,7 @@ export const orchestratorProfiles: GovernanceProfile[] = [
 [커스터마이즈: 서비스 특성과 SLO를 기술]`,
     lockedFields: ["model", "tools", "disallowedTools"],
     allowedCallTargets: ["readonly-*", "executor-*", "devops-*", "researcher-*"],
+    referenceFiles: ["CLAUDE.md", "docs/runbook.md", "docs/slo.md"],
   },
   {
     id: "orchestrator-full",
@@ -234,5 +238,6 @@ export const orchestratorProfiles: GovernanceProfile[] = [
 - 예상치 못한 상태: 작업 중단 후 보고`,
     lockedFields: ["model"],
     allowedCallTargets: ["readonly-*", "creator-*", "executor-*", "researcher-*", "devops-*"],
+    referenceFiles: ["CLAUDE.md"],
   },
 ];

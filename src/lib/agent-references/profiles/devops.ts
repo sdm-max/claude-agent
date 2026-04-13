@@ -50,6 +50,7 @@ export const devopsProfiles: GovernanceProfile[] = [
 3. 로그 분석 (필요 시)
 4. 상태 보고서 작성`,
     lockedFields: ["tools", "disallowedTools", "permissionMode", "hooks"],
+    referenceFiles: ["CLAUDE.md"],
   },
   {
     id: "devops-monitoring",
@@ -85,6 +86,7 @@ export const devopsProfiles: GovernanceProfile[] = [
 2. **Logs** — 구조화 로깅, 레벨, 보관 정책
 3. **Alerts** — 임계값, 에스컬레이션 정책
 4. **Dashboards** — 서비스별 대시보드`,
+    referenceFiles: ["CLAUDE.md", "docs/slo.md"],
   },
   {
     id: "devops-k8s-operator",
@@ -138,6 +140,7 @@ export const devopsProfiles: GovernanceProfile[] = [
 4. HPA, PDB 설정
 5. 리소스 쿼터 관리`,
     lockedFields: ["hooks"],
+    referenceFiles: ["CLAUDE.md", "docs/k8s-runbook.md"],
   },
   {
     id: "devops-apply",
@@ -190,5 +193,6 @@ export const devopsProfiles: GovernanceProfile[] = [
 4. 적용 후 상태 확인
 5. 결과 보고`,
     lockedFields: ["model", "hooks", "disallowedTools"],
+    referenceFiles: ["CLAUDE.md"],
   },
 ];

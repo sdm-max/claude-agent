@@ -41,6 +41,7 @@ export const readonlyProfiles: GovernanceProfile[] = [
 - [WARNING] — 수정 권장
 - [SUGGESTION] — 개선 제안`,
     lockedFields: ["tools", "disallowedTools", "permissionMode"],
+    referenceFiles: ["CLAUDE.md"],
   },
   {
     id: "readonly-analysis",
@@ -107,6 +108,7 @@ export const readonlyProfiles: GovernanceProfile[] = [
         ],
       },
     },
+    referenceFiles: ["CLAUDE.md"],
   },
   {
     id: "readonly-log-analyzer",
@@ -143,6 +145,7 @@ export const readonlyProfiles: GovernanceProfile[] = [
 3. 이상 징후 식별 (급증, 반복 등)
 4. 근본 원인 가설 제시`,
     lockedFields: ["disallowedTools"],
+    referenceFiles: ["CLAUDE.md"],
   },
   {
     id: "readonly-dep-checker",
@@ -179,6 +182,7 @@ export const readonlyProfiles: GovernanceProfile[] = [
 3. package.json의 peer dependency 충돌
 4. 사용하지 않는 의존성 (depcheck)`,
     lockedFields: ["disallowedTools"],
+    referenceFiles: ["package.json"],
   },
   {
     id: "readonly-web",
@@ -216,5 +220,6 @@ export const readonlyProfiles: GovernanceProfile[] = [
 3. 프로젝트 코드와 비교 분석
 4. 구조화된 보고서 작성`,
     lockedFields: ["tools", "disallowedTools"],
+    referenceFiles: ["CLAUDE.md"],
   },
 ];
