@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import CodeEditor from "./CodeEditor";
 import EditorToolbar from "./EditorToolbar";
 import { Button } from "@/components/ui/button";
@@ -108,31 +108,59 @@ export default function FileDirectoryEditor({
   const [pendingSelect, setPendingSelect] = useState<string | null>(null);
 
   const hasChanges = content !== savedContent;
+  const hasChangesRef = useRef(hasChanges);
+  useEffect(() => { hasChangesRef.current = hasChanges; }, [hasChanges]);
+  const selectedNameRef = useRef(selectedName);
+  useEffect(() => { selectedNameRef.current = selectedName; }, [selectedName]);
 
   const apiBase = `/api/projects/${projectId}/${type}`;
 
   // ── Fetch file list ──────────────────────────────────────────────────────
-  const fetchFiles = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(apiBase);
-      if (res.ok) {
-        const data: FileEntry[] = await res.json();
-        setFiles(data);
-        onFilesChange?.(data);
-      } else {
-        const err = await res.json().catch(() => ({}));
-        alert(err.error || `Failed to load files (${res.status})`);
+  // silent=true skips alert on error (used by focus listener) and skips spinner
+  const fetchFiles = useCallback(
+    async (opts?: { silent?: boolean }) => {
+      const silent = opts?.silent ?? false;
+      if (!silent) setLoading(true);
+      try {
+        const res = await fetch(apiBase);
+        if (res.ok) {
+          const data: FileEntry[] = await res.json();
+          setFiles(data);
+          onFilesChange?.(data);
+
+          // Stale-safe: if the currently selected file vanished externally and
+          // user has no unsaved edits, close the editor. If user is editing,
+          // keep their buffer — list updates but editor is untouched.
+          const currentSelected = selectedNameRef.current;
+          if (currentSelected && !data.some((f) => f.name === currentSelected)) {
+            if (!hasChangesRef.current) {
+              setSelectedName(null);
+              setContent("");
+              setSavedContent("");
+            }
+          }
+        } else if (!silent) {
+          const err = await res.json().catch(() => ({}));
+          alert(err.error || `Failed to load files (${res.status})`);
+        }
+      } catch {
+        if (!silent) alert("Network error: Failed to load files");
+      } finally {
+        if (!silent) setLoading(false);
       }
-    } catch {
-      alert("Network error: Failed to load files");
-    } finally {
-      setLoading(false);
-    }
-  }, [apiBase]);
+    },
+    [apiBase, onFilesChange],
+  );
 
   useEffect(() => {
     fetchFiles();
+  }, [fetchFiles]);
+
+  // ── Auto-refresh on window focus (catches external filesystem changes) ──
+  useEffect(() => {
+    const onFocus = () => { void fetchFiles({ silent: true }); };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
   }, [fetchFiles]);
 
   // ── beforeunload guard ───────────────────────────────────────────────────
@@ -286,9 +314,20 @@ export default function FileDirectoryEditor({
               ({files.length})
             </span>
           </span>
-          <Button variant="outline" size="xs" onClick={openNewDialog}>
-            New
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="xs"
+              onClick={() => fetchFiles()}
+              disabled={loading}
+              title="Refresh file list"
+            >
+              {loading ? "..." : "↻"}
+            </Button>
+            <Button variant="outline" size="xs" onClick={openNewDialog}>
+              New
+            </Button>
+          </div>
         </div>
 
         {/* File list */}
