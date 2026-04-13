@@ -777,3 +777,254 @@ Settings 탭의 HookSection(matcher/command/timeout 폼)과 Hooks 탭의 FileDir
 ---
 
 *작성일: 2026-04-12*
+
+---
+
+# 추가 작업 — 에이전트 거버넌스 프로필 확장 & 참조 파일 자동 주입 (2026-04-13)
+
+## 프로젝트 개요 (추가분)
+기존 에이전트 거버넌스 시스템(Phase 1~8)에 대해 두 가지 개선을 수행:
+1. 거버넌스 프로필 16개 → 28개 확장 (현실 업무 커버리지 향상)
+2. 에이전트 생성 시 참조 문서(`@path`)를 자동 주입하는 `referenceFiles` 기능 추가
+
+## 기술 스택
+- (변경 없음) Next.js 16 App Router, TypeScript, Drizzle, base-ui, CodeMirror 6
+
+## DB 스키마
+- (변경 없음) 본 작업은 런타임 데이터베이스 영향 없음 — 순수 코드 레벨 추가
+
+## API 엔드포인트 (변경/확장)
+| Method | Path | 설명 |
+|---|---|---|
+| GET | `/api/agent-references` | 28개 프로필 전체 반환 (기존) |
+| GET | `/api/agent-references/[id]` | 단일 프로필 반환 (기존) |
+| POST | `/api/agent-references/[id]/render` | **확장** — body에 `referenceFiles?: string[]` 수신, 응답에 `defaultReferenceFiles` 추가 |
+| GET | `/api/agent-references/policies` | 거버넌스 정책 (기존) |
+| GET | `/api/projects/[id]/agents/analysis` | 비용·의존성·검증 분석 (기존) |
+
+## 페이지 구성
+- (변경 없음) `/projects/[id]?category=agents` 에서 `AgentEditor` → `CreateAgentDialog`로 진입
+
+## UI 컴포넌트 변경 내역
+| 파일 | 용도 | 이번 변경 |
+|---|---|---|
+| `CreateAgentDialog.tsx` | 2단계 에이전트 생성 다이얼로그 | Step 2에 참조 문서 관리 UI 추가 (칩 리스트 + 추가 input + 제거 버튼 + 실시간 프리뷰 재렌더) |
+| `ProfileSelector.tsx` | 카테고리별 프로필 선택 | 변경 없음 (28개 자동 반영) |
+| `AgentPreview.tsx` | CodeMirror 읽기 전용 미리보기 | 변경 없음 |
+
+### CreateAgentDialog 신규 상태
+- `referenceFiles: string[]` — Step 2 진입 시 `defaultReferenceFiles`로 초기화
+- `newRefPath: string` — 신규 경로 입력
+- `fetchPreview(refs, useDefaultsIfFirst)` — 단일 렌더 함수로 통합
+- `addRef()` / `removeRef(path)` — 변경 시 즉시 프리뷰 refetch
+
+## 파일 구조 트리 (이번 세션 변경 범위)
+```
+src/lib/agent-references/
+├── types.ts                    ← referenceFiles?: string[] 필드 추가
+├── renderer.ts                 ← renderReferenceSection() + renderAgentMd 확장
+└── profiles/
+    ├── readonly.ts             ← 5개 프로필 (+2 log-analyzer, dep-checker) + refs
+    ├── creator.ts              ← 6개 프로필 (+3 refactor, ui-component, api-endpoint) + refs
+    ├── executor.ts             ← 4개 프로필 (+2 db-migrator, deployer) + refs
+    ├── researcher.ts           ← 4개 프로필 (+2 library-evaluator, rfc-drafter) + refs
+    ├── devops.ts               ← 4개 프로필 (+2 monitoring, k8s-operator) + refs
+    └── orchestrator.ts         ← 5개 프로필 (+3 feature/release/incident) + refs
+src/app/api/agent-references/[id]/render/route.ts  ← referenceFiles 수신 + defaults 반환
+src/components/agents/CreateAgentDialog.tsx        ← Step 2 refs 관리 UI
+```
+
+## 구현 기능 상세
+
+### 1) 프로필 28개 확장
+- **readonly (3→5)**: `readonly-log-analyzer`(로그 분석), `readonly-dep-checker`(의존성 취약점/구버전)
+- **creator (3→6)**: `creator-refactor`(worktree 리팩토링), `creator-ui-component`(React/Vue 컴포넌트), `creator-api-endpoint`(REST/GraphQL 라우트)
+- **executor (2→4)**: `executor-db-migrator`(DROP/TRUNCATE 차단 훅), `executor-deployer`(canary/blue-green)
+- **researcher (2→4)**: `researcher-library-evaluator`(비교 표), `researcher-rfc-drafter`(RFC 초안)
+- **devops (2→4)**: `devops-monitoring`(RED/USE + 알림), `devops-k8s-operator`(namespace 삭제 차단 훅)
+- **orchestrator (2→5)**: `orchestrator-feature-builder`(설계→구현→테스트→리뷰), `orchestrator-release-manager`(릴리스 파이프라인), `orchestrator-incident-response`(장애 대응)
+
+### 2) referenceFiles 자동 주입
+**동작 흐름:**
+1. 프로필에 `referenceFiles: ["CLAUDE.md", "docs/..."]` 선언
+2. `renderAgentMd()`가 body의 `# 제목` 뒤에 섹션 삽입:
+   ```markdown
+   ## 참조 문서 (자동 로드)
+   @CLAUDE.md
+   @docs/api-conventions.md
+   ```
+3. Claude Code가 에이전트 실행 시 `@경로` 를 자동으로 컨텍스트에 로드
+4. UI에서 사용자가 Step 2 미리보기 상에서 기본값 확인 후 추가/제거 가능
+
+**렌더러 로직:**
+- `renderReferenceSection(files: string[])` — `@` 접두사 정규화, 빈 배열이면 빈 문자열
+- body `^(#[^\n]*\n\n?)` 정규식 매치 후 그 뒤에 섹션 삽입 (제목 없으면 최상단)
+- 우선순위: `overrides.referenceFiles` (API 호출) > `profile.referenceFiles` (기본값)
+
+### 3) 프로필별 기본 참조 파일
+| 프로필 | 기본 참조 파일 |
+|---|---|
+| readonly-strict / analysis / log-analyzer / web | `CLAUDE.md` |
+| readonly-dep-checker | `package.json` |
+| creator-additive / full | `CLAUDE.md` |
+| creator-refactor | `CLAUDE.md`, `docs/coding-standards.md` |
+| creator-ui-component | `CLAUDE.md`, `docs/design-system.md` |
+| creator-api-endpoint | `CLAUDE.md`, `docs/api-conventions.md` |
+| executor-isolated / sandboxed | `CLAUDE.md` |
+| executor-db-migrator | `CLAUDE.md`, `docs/db-migration-guide.md` |
+| executor-deployer | `CLAUDE.md`, `docs/deployment.md` |
+| researcher-light / deep | `CLAUDE.md` |
+| researcher-library-evaluator | `package.json` |
+| researcher-rfc-drafter | `CLAUDE.md`, `docs/architecture.md` |
+| devops-readonly / apply | `CLAUDE.md` |
+| devops-monitoring | `CLAUDE.md`, `docs/slo.md` |
+| devops-k8s-operator | `CLAUDE.md`, `docs/k8s-runbook.md` |
+| orchestrator-readonly / full | `CLAUDE.md` |
+| orchestrator-feature-builder | `CLAUDE.md`, `docs/architecture.md` |
+| orchestrator-release-manager | `CLAUDE.md`, `docs/release-process.md` |
+| orchestrator-incident-response | `CLAUDE.md`, `docs/runbook.md`, `docs/slo.md` |
+
+## 보안/에러 처리 내역
+- **파괴적 명령 자동 차단 훅** — 신규 프로필에 적용:
+  - `executor-db-migrator`: `DROP TABLE | TRUNCATE | DELETE FROM ... WHERE 1=1 | DROP DATABASE`
+  - `devops-k8s-operator`: `kubectl delete namespace | kubectl delete -f | helm uninstall | kubectl drain --force`
+- **lockedFields 확장** — 14개 신규 프로필에 보안/거버넌스 필드 잠금 설정
+- **존재하지 않는 참조 파일** — `@docs/xxx.md`가 실제 없어도 Claude Code가 경고만 출력 (에이전트 실행 자체는 실패하지 않음)
+- **API 검증** — `validateAgentName` / `validateFrontmatter` / `checkLockedFieldChanges` 기존 로직 그대로 적용
+
+## 발견/수정한 버그
+- 이번 세션 중 신규 버그 발견 없음 (모든 변경이 additive)
+
+## 테스트 결과 (증거)
+1. **TypeScript 빌드**: `npx tsc --noEmit` → 무출력 (통과)
+2. **프로필 개수 검증**:
+   ```
+   $ curl -s http://localhost:3000/api/agent-references | jq '.total'
+   28
+   ```
+3. **기본 참조 파일 주입 검증**:
+   ```
+   $ curl -s -X POST .../creator-api-endpoint/render -d '{"agentName":"test-api"}'
+   → defaultReferenceFiles: ["CLAUDE.md", "docs/api-conventions.md"]
+   → md 본문에 "## 참조 문서 (자동 로드)\n@CLAUDE.md\n@docs/api-conventions.md" 삽입 확인
+   ```
+4. **override 동작 검증**:
+   ```
+   $ curl -s -X POST .../creator-api-endpoint/render \
+       -d '{"agentName":"test-api","referenceFiles":["docs/custom.md"]}'
+   → 본문에 @docs/custom.md 만 표시 (기본값 대체)
+   ```
+
+## 설치한 패키지 목록
+- 없음 (이번 세션은 기존 스택만 사용)
+
+## git 변경 파일 목록
+
+### 커밋 `b8c0c03` — feat(agents): expand governance profiles from 16 to 28
+수정 6개:
+- `src/lib/agent-references/profiles/readonly.ts`
+- `src/lib/agent-references/profiles/creator.ts`
+- `src/lib/agent-references/profiles/executor.ts`
+- `src/lib/agent-references/profiles/researcher.ts`
+- `src/lib/agent-references/profiles/devops.ts`
+- `src/lib/agent-references/profiles/orchestrator.ts`
+총 +578 삽입
+
+### 커밋 `0acb83e` — feat(agents): add referenceFiles for auto-loaded agent context
+수정 10개:
+- `src/lib/agent-references/types.ts` (+6)
+- `src/lib/agent-references/renderer.ts` (+36/-)
+- `src/lib/agent-references/profiles/readonly.ts` (+5)
+- `src/lib/agent-references/profiles/creator.ts` (+5)
+- `src/lib/agent-references/profiles/executor.ts` (+4)
+- `src/lib/agent-references/profiles/researcher.ts` (+4)
+- `src/lib/agent-references/profiles/devops.ts` (+4)
+- `src/lib/agent-references/profiles/orchestrator.ts` (+5)
+- `src/app/api/agent-references/[id]/render/route.ts` (+8/-)
+- `src/components/agents/CreateAgentDialog.tsx` (+118/-)
+총 +174 / -21
+
+## 설정값/템플릿/상수 정의 내용
+
+### 신규 타입 필드
+```ts
+// src/lib/agent-references/types.ts
+export interface GovernanceProfile {
+  // ... 기존 필드
+  referenceFiles?: string[];  // 자동 로드될 @-mention 파일 경로
+}
+```
+
+### 렌더러 신규 함수
+```ts
+// src/lib/agent-references/renderer.ts
+function renderReferenceSection(referenceFiles: string[]): string
+// → "## 참조 문서 (자동 로드)\n@path1\n@path2\n\n"
+
+export function renderAgentMd(
+  profile: GovernanceProfile,
+  agentName: string,
+  overrides?: Partial<AgentFrontmatter>,
+  referenceFiles?: string[]  // ← 신규 파라미터
+): string
+```
+
+## 데이터 흐름 설명
+
+### 에이전트 생성 플로우 (참조 파일 포함)
+```
+[사용자] CreateAgentDialog 열기
+   ↓
+Step 1: agentName 입력 + profileId 선택
+   ↓ "Next →"
+POST /api/agent-references/{profileId}/render { agentName }
+   ↓
+서버: renderAgentMd(profile, name, undefined, undefined)
+     → referenceFiles = profile.referenceFiles (프로필 기본값)
+     → body에 "## 참조 문서" 섹션 주입
+   ↓
+응답: { md, warnings, defaultReferenceFiles, companionSettings }
+   ↓
+Step 2: md 프리뷰 + defaultReferenceFiles를 칩으로 표시
+   ↓ [사용자가 칩 ×클릭 / 입력+추가 버튼]
+refreshPreview(next) → POST render { agentName, referenceFiles: next }
+   ↓
+서버: renderAgentMd(profile, name, undefined, next)  ← 명시적 override
+     → 사용자 지정 목록으로 섹션 재생성
+   ↓
+CodeMirror 프리뷰 즉시 업데이트
+   ↓ "Create"
+onCreate(name, md) → AgentEditor가 파일 저장
+```
+
+### Claude Code 런타임 흐름
+```
+에이전트 실행 → .md body의 @CLAUDE.md / @docs/xxx.md 파싱
+   ↓
+Claude Code가 해당 파일을 자동으로 읽어 시스템 프롬프트 컨텍스트에 주입
+   ↓
+에이전트는 별도 Read 호출 없이 참조 문서 내용을 이미 알고 있는 상태로 작업 시작
+```
+
+## 빠진 항목 스스로 점검
+- [x] 프로젝트 개요 + 기술 스택
+- [x] DB 스키마 (변경 없음 명시)
+- [x] API 엔드포인트 (render 확장 명시)
+- [x] 페이지 구성 (진입 경로)
+- [x] UI 컴포넌트 (CreateAgentDialog 변경분)
+- [x] 파일 구조 트리 (변경 범위)
+- [x] 구현 기능 상세 (3개 섹션)
+- [x] 보안/에러 처리 (파괴적 명령 훅 + lockedFields + 미존재 파일 처리)
+- [x] 발견/수정한 버그 (없음 명시)
+- [x] 테스트 결과 (tsc + curl 3건)
+- [x] 설치한 패키지 (없음 명시)
+- [x] git 변경 파일 (커밋별)
+- [x] 설정값/템플릿/상수 (타입/함수 시그니처)
+- [x] 데이터 흐름 (생성 + 런타임)
+- [x] 빠진 항목 점검 ← 이 항목
+
+---
+
+*추가 작업 완료일: 2026-04-13*
+*커밋: `b8c0c03`, `0acb83e`*
+
