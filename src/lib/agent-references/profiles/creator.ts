@@ -103,6 +103,118 @@ export const creatorProfiles: GovernanceProfile[] = [
     },
   },
   {
+    id: "creator-refactor",
+    name: "Refactor Specialist",
+    nameKo: "리팩토링 전문",
+    description: "Refactor existing code without changing behavior",
+    descriptionKo: "동작 변경 없이 기존 코드를 리팩토링하는 전문 에이전트",
+    category: "creator",
+    riskLevel: "moderate",
+    costTier: 3,
+    frontmatter: {
+      description: "Refactor specialist — improve code structure, preserve behavior",
+      model: "sonnet",
+      tools: ["Read", "Edit", "Write", "Glob", "Grep", "Bash"],
+      disallowedTools: ["Agent"],
+      permissionMode: "acceptEdits",
+      maxTurns: 25,
+      effort: "high",
+      isolation: "worktree",
+      color: "purple",
+    },
+    bodyTemplate: `# {{name}}
+
+## 필수 규칙
+- 기존 동작 절대 변경 금지 (behavior-preserving only)
+- 각 리팩토링 단계 후 테스트 실행 필수
+- 공개 API 시그니처 변경 금지
+- worktree에서 실행하여 메인 브랜치 보호
+
+## 역할
+[커스터마이즈: 리팩토링 대상과 목표를 기술]
+
+## 리팩토링 절차
+1. 기존 테스트 실행 → 베이스라인 확인
+2. 한 번에 하나의 리팩토링 적용
+3. 테스트 재실행 → 동일 결과 확인
+4. 작은 단위로 커밋 가능한 상태 유지`,
+    lockedFields: ["isolation"],
+  },
+  {
+    id: "creator-ui-component",
+    name: "UI Component Generator",
+    nameKo: "UI 컴포넌트 생성",
+    description: "Generate React/Vue UI components following project conventions",
+    descriptionKo: "프로젝트 컨벤션을 따라 UI 컴포넌트 생성 전용 에이전트",
+    category: "creator",
+    riskLevel: "moderate",
+    costTier: 2,
+    frontmatter: {
+      description: "UI component generator — create components following project patterns",
+      model: "sonnet",
+      tools: ["Read", "Write", "Edit", "Glob", "Grep"],
+      disallowedTools: ["Bash", "Agent"],
+      permissionMode: "acceptEdits",
+      maxTurns: 20,
+      effort: "medium",
+      color: "pink",
+    },
+    bodyTemplate: `# {{name}}
+
+## 필수 규칙
+- components/ 디렉토리 내에서만 파일 생성
+- Bash 명령 실행 금지
+- 기존 컴포넌트 패턴 분석 후 동일한 스타일로 생성
+- 타입 안전성 유지 (TypeScript)
+
+## 역할
+[커스터마이즈: 생성할 컴포넌트 유형과 디자인 시스템을 기술]
+
+## 생성 절차
+1. 기존 컴포넌트 스캔 (파일 구조, 네이밍, props 패턴)
+2. 스타일링 방식 확인 (CSS/Tailwind/CSS-in-JS)
+3. 새 컴포넌트 생성 (tsx + 타입)
+4. 스토리북/테스트 필요 시 함께 생성`,
+    lockedFields: ["disallowedTools"],
+  },
+  {
+    id: "creator-api-endpoint",
+    name: "API Endpoint Generator",
+    nameKo: "API 엔드포인트 생성",
+    description: "Generate REST/GraphQL API endpoints with validation",
+    descriptionKo: "검증 로직을 포함한 REST/GraphQL API 엔드포인트 생성",
+    category: "creator",
+    riskLevel: "moderate",
+    costTier: 3,
+    frontmatter: {
+      description: "API endpoint generator — create routes with validation and tests",
+      model: "sonnet",
+      tools: ["Read", "Write", "Edit", "Glob", "Grep", "Bash"],
+      disallowedTools: ["Agent"],
+      permissionMode: "acceptEdits",
+      maxTurns: 25,
+      effort: "high",
+      color: "green",
+    },
+    bodyTemplate: `# {{name}}
+
+## 필수 규칙
+- 기존 라우트 패턴 분석 후 일관된 구조 유지
+- 모든 엔드포인트에 입력 검증 필수
+- 에러 처리 및 상태 코드 표준 준수
+- 인증/권한 체크 포함
+
+## 역할
+[커스터마이즈: API 스타일(REST/GraphQL), 인증 방식을 기술]
+
+## 생성 절차
+1. 기존 API 패턴 분석
+2. 스키마 정의 (Zod/Joi/TypeBox)
+3. 라우트 핸들러 작성
+4. 인증/권한 미들웨어 적용
+5. 테스트 생성 및 실행`,
+  },
+  {
     id: "creator-full",
     name: "Full Creator",
     nameKo: "전체 생성",

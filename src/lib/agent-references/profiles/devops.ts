@@ -52,6 +52,94 @@ export const devopsProfiles: GovernanceProfile[] = [
     lockedFields: ["tools", "disallowedTools", "permissionMode", "hooks"],
   },
   {
+    id: "devops-monitoring",
+    name: "Monitoring Setup",
+    nameKo: "모니터링 설정",
+    description: "Configure metrics, logs, and alerts",
+    descriptionKo: "메트릭, 로그, 알림 설정을 구성하는 에이전트",
+    category: "devops",
+    riskLevel: "moderate",
+    costTier: 3,
+    frontmatter: {
+      description: "Monitoring setup — configure metrics, logs, and alerts",
+      model: "sonnet",
+      tools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
+      disallowedTools: ["Agent"],
+      permissionMode: "acceptEdits",
+      maxTurns: 20,
+      effort: "high",
+      color: "cyan",
+    },
+    bodyTemplate: `# {{name}}
+
+## 필수 규칙
+- 기존 모니터링 스택(Prometheus/Datadog/Grafana) 컨벤션 준수
+- 알림 임계값은 팀과 합의된 값만 사용
+- 과도한 알림(노이즈) 방지
+
+## 역할
+[커스터마이즈: 모니터링 대상 서비스와 SLO를 기술]
+
+## 설정 범위
+1. **Metrics** — RED (Rate/Errors/Duration), USE (Utilization/Saturation/Errors)
+2. **Logs** — 구조화 로깅, 레벨, 보관 정책
+3. **Alerts** — 임계값, 에스컬레이션 정책
+4. **Dashboards** — 서비스별 대시보드`,
+  },
+  {
+    id: "devops-k8s-operator",
+    name: "Kubernetes Operator",
+    nameKo: "Kubernetes 운영",
+    description: "Manage Kubernetes workloads with safety rails",
+    descriptionKo: "안전 가드를 포함한 Kubernetes 워크로드 관리 에이전트",
+    category: "devops",
+    riskLevel: "high",
+    costTier: 4,
+    frontmatter: {
+      description: "Kubernetes operator — manage workloads with safety checks",
+      model: "opus",
+      tools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
+      disallowedTools: ["Agent"],
+      permissionMode: "default",
+      maxTurns: 25,
+      effort: "high",
+      color: "blue",
+      hooks: {
+        PreToolUse: [
+          {
+            matcher: "Bash",
+            hooks: [
+              {
+                type: "command",
+                command:
+                  "CMD=$(cat | jq -r '.tool_input.command // empty'); echo \"$CMD\" | grep -qE '(kubectl delete namespace|kubectl delete -f|helm uninstall|kubectl drain.*--force)' && { echo '{\"block\":true,\"message\":\"K8s destructive command blocked\"}' >&2; exit 2; } || exit 0",
+                timeout: 5,
+              },
+            ],
+          },
+        ],
+      },
+    },
+    bodyTemplate: `# {{name}}
+
+## 필수 규칙
+- namespace 삭제, force drain 등 파괴적 명령 자동 차단
+- 프로덕션 클러스터 변경은 반드시 dry-run 선행
+- PodDisruptionBudget 준수
+- 리소스 limits/requests 설정 필수
+
+## 역할
+[커스터마이즈: 관리 대상 클러스터와 워크로드 종류를 기술]
+
+## 작업 범위
+1. Deployment, StatefulSet, DaemonSet 관리
+2. ConfigMap, Secret 관리 (민감 정보 주의)
+3. Service, Ingress 라우팅
+4. HPA, PDB 설정
+5. 리소스 쿼터 관리`,
+    lockedFields: ["hooks"],
+  },
+  {
     id: "devops-apply",
     name: "DevOps Applier",
     nameKo: "DevOps 적용",

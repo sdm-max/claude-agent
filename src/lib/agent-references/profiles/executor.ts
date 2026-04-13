@@ -58,6 +58,99 @@ export const executorProfiles: GovernanceProfile[] = [
     lockedFields: ["isolation", "model", "disallowedTools"],
   },
   {
+    id: "executor-db-migrator",
+    name: "DB Migrator",
+    nameKo: "DB 마이그레이션 실행",
+    description: "Execute database migrations safely with rollback plan",
+    descriptionKo: "롤백 계획을 갖춘 안전한 DB 마이그레이션 실행 에이전트",
+    category: "executor",
+    riskLevel: "high",
+    costTier: 4,
+    frontmatter: {
+      description: "Database migration executor — safe apply with rollback",
+      model: "opus",
+      tools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
+      disallowedTools: ["Agent"],
+      permissionMode: "default",
+      maxTurns: 25,
+      effort: "high",
+      isolation: "worktree",
+      color: "red",
+      hooks: {
+        PreToolUse: [
+          {
+            matcher: "Bash",
+            hooks: [
+              {
+                type: "command",
+                command:
+                  "CMD=$(cat | jq -r '.tool_input.command // empty'); echo \"$CMD\" | grep -qE '(DROP TABLE|TRUNCATE|DELETE FROM.*WHERE.*1=1|DROP DATABASE)' && { echo '{\"block\":true,\"message\":\"Destructive SQL blocked\"}' >&2; exit 2; } || exit 0",
+                timeout: 5,
+              },
+            ],
+          },
+        ],
+      },
+    },
+    bodyTemplate: `# {{name}}
+
+## 필수 규칙
+- 프로덕션 DB 직접 접근 금지 (staging에서만 테스트)
+- DROP TABLE, TRUNCATE, WHERE 1=1 삭제 자동 차단
+- 마이그레이션 전 반드시 백업 확인
+- 각 마이그레이션에 롤백 스크립트 포함 필수
+
+## 역할
+[커스터마이즈: 대상 DB와 ORM을 기술]
+
+## 마이그레이션 절차
+1. 현재 스키마 상태 확인
+2. 마이그레이션 SQL/코드 작성
+3. 롤백 스크립트 작성
+4. dry-run 또는 staging에서 테스트
+5. 마이그레이션 실행
+6. 검증 쿼리로 결과 확인`,
+    lockedFields: ["isolation", "hooks", "model"],
+  },
+  {
+    id: "executor-deployer",
+    name: "Deployer",
+    nameKo: "배포 실행",
+    description: "Execute deployment pipelines with health checks",
+    descriptionKo: "헬스 체크를 포함한 배포 파이프라인 실행 에이전트",
+    category: "executor",
+    riskLevel: "high",
+    costTier: 4,
+    frontmatter: {
+      description: "Deployer — execute deployment with health checks and rollback",
+      model: "opus",
+      tools: ["Read", "Bash", "Glob", "Grep"],
+      disallowedTools: ["Write", "Edit", "Agent"],
+      permissionMode: "default",
+      maxTurns: 20,
+      effort: "high",
+      color: "red",
+    },
+    bodyTemplate: `# {{name}}
+
+## 필수 규칙
+- 배포 전 빌드 및 테스트 통과 확인 필수
+- 프로덕션 배포는 반드시 blue-green 또는 canary 방식
+- 배포 후 헬스 체크 필수
+- 문제 시 즉시 롤백 실행
+
+## 역할
+[커스터마이즈: 배포 대상 환경과 방식을 기술]
+
+## 배포 절차
+1. 빌드 결과 확인
+2. 테스트 통과 확인
+3. staging 배포 및 smoke test
+4. 프로덕션 배포 (canary/blue-green)
+5. 헬스 체크 및 메트릭 모니터링
+6. 이상 감지 시 자동 롤백`,
+  },
+  {
     id: "executor-sandboxed",
     name: "Sandboxed Executor",
     nameKo: "샌드박스 실행",

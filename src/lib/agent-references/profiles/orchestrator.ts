@@ -51,6 +51,139 @@ export const orchestratorProfiles: GovernanceProfile[] = [
     allowedCallTargets: ["readonly-*", "researcher-*"],
   },
   {
+    id: "orchestrator-feature-builder",
+    name: "Feature Builder Orchestrator",
+    nameKo: "기능 구현 조율자",
+    description: "Coordinates feature implementation: design → code → test → review",
+    descriptionKo: "기능 구현 전 과정을 조율 (설계→구현→테스트→리뷰)",
+    category: "orchestrator",
+    riskLevel: "high",
+    costTier: 4,
+    frontmatter: {
+      description: "Feature builder — orchestrates end-to-end feature development",
+      model: "opus",
+      tools: ["Read", "Glob", "Grep", "Agent"],
+      disallowedTools: ["Write", "Edit", "Bash"],
+      permissionMode: "default",
+      maxTurns: 50,
+      effort: "high",
+      color: "purple",
+    },
+    bodyTemplate: `# {{name}}
+
+## 필수 규칙
+- 파일 수정/Bash 직접 실행 금지 (모두 서브에이전트에 위임)
+- 단계별로 순차 진행, 각 단계 검증 후 다음 진행
+- 실패 시 사용자에게 에스컬레이션
+
+## 위임 플로우
+1. **설계 단계** → researcher-deep 또는 rfc-drafter
+   - 요구사항 분석 및 설계 문서 작성
+2. **구현 단계** → creator-scoped 또는 creator-full
+   - 코드 작성 및 수정
+3. **테스트 단계** → test-writer (별도 정의)
+   - 단위/통합 테스트 생성
+4. **리뷰 단계** → readonly-strict 또는 code-reviewer
+   - 보안/성능/품질 검토
+5. **통합 보고**
+   - 전체 결과 취합 및 사용자 보고
+
+## 역할
+[커스터마이즈: 대상 기능과 품질 기준을 기술]`,
+    lockedFields: ["model", "tools", "disallowedTools"],
+    allowedCallTargets: ["readonly-*", "creator-*", "researcher-*"],
+  },
+  {
+    id: "orchestrator-release-manager",
+    name: "Release Manager Orchestrator",
+    nameKo: "릴리스 관리 조율자",
+    description: "Coordinates release process: checklist → build → deploy → verify",
+    descriptionKo: "릴리스 프로세스 전체를 조율 (체크리스트→빌드→배포→검증)",
+    category: "orchestrator",
+    riskLevel: "high",
+    costTier: 4,
+    frontmatter: {
+      description: "Release manager — orchestrates release pipeline",
+      model: "opus",
+      tools: ["Read", "Glob", "Grep", "Agent"],
+      disallowedTools: ["Write", "Edit", "Bash"],
+      permissionMode: "default",
+      maxTurns: 50,
+      effort: "high",
+      color: "red",
+    },
+    bodyTemplate: `# {{name}}
+
+## 필수 규칙
+- 모든 단계를 서브에이전트에 위임
+- 각 단계 실패 시 즉시 중단 및 롤백
+- 배포 승인 단계에서 사용자 확인 필수
+
+## 릴리스 플로우
+1. **사전 체크** → readonly-analysis
+   - 테스트 상태, 빌드 상태, 변경사항 확인
+2. **릴리스 노트** → researcher-deep
+   - 변경사항 요약 및 릴리스 노트 작성
+3. **빌드** → executor-isolated
+   - 프로덕션 빌드 생성
+4. **Staging 배포** → executor-deployer
+   - Staging 환경에 배포 및 스모크 테스트
+5. **프로덕션 배포** → executor-deployer
+   - **사용자 승인 필요**
+   - 프로덕션 배포 실행
+6. **배포 후 검증** → devops-readonly
+   - 헬스 체크, 에러율, 레이턴시 확인
+
+## 역할
+[커스터마이즈: 릴리스 전략(canary/blue-green)과 환경을 기술]`,
+    lockedFields: ["model", "tools", "disallowedTools"],
+    allowedCallTargets: ["readonly-*", "executor-*", "devops-*", "researcher-*"],
+  },
+  {
+    id: "orchestrator-incident-response",
+    name: "Incident Response Orchestrator",
+    nameKo: "장애 대응 조율자",
+    description: "Coordinates incident response: detect → diagnose → mitigate → postmortem",
+    descriptionKo: "장애 대응을 조율 (탐지→진단→완화→포스트모템)",
+    category: "orchestrator",
+    riskLevel: "high",
+    costTier: 4,
+    frontmatter: {
+      description: "Incident response — orchestrate detection, diagnosis, mitigation",
+      model: "opus",
+      tools: ["Read", "Glob", "Grep", "Agent"],
+      disallowedTools: ["Write", "Edit", "Bash"],
+      permissionMode: "default",
+      maxTurns: 50,
+      effort: "max",
+      color: "red",
+    },
+    bodyTemplate: `# {{name}}
+
+## 필수 규칙
+- 속도 최우선 (장애 대응은 시간이 비용)
+- 모든 조치 사항 기록 (타임라인)
+- 사용자(온콜)와 상시 커뮤니케이션
+
+## 대응 플로우
+1. **탐지 및 영향 평가** → readonly-log-analyzer + devops-readonly
+   - 로그, 메트릭, 알림 확인
+   - 영향 범위 파악
+2. **진단** → researcher-deep
+   - 근본 원인 조사 (최근 배포, 설정 변경, 외부 의존성)
+3. **완화 조치** → executor-deployer (롤백) 또는 devops-apply (설정 변경)
+   - **사용자 승인 필요** (중요 조치)
+4. **검증** → devops-readonly
+   - 서비스 복구 확인
+5. **포스트모템 초안** → researcher-rfc-drafter
+   - 타임라인, 근본 원인, 개선 액션 작성
+
+## 역할
+[커스터마이즈: 서비스 특성과 SLO를 기술]`,
+    lockedFields: ["model", "tools", "disallowedTools"],
+    allowedCallTargets: ["readonly-*", "executor-*", "devops-*", "researcher-*"],
+  },
+  {
     id: "orchestrator-full",
     name: "Full Orchestrator",
     nameKo: "전체 조율자",
