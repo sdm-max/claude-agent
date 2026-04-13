@@ -9,23 +9,46 @@ import { listDirectoryFiles, readFileContent, writeFileContent, fileExists } fro
 type Params = { params: Promise<{ id: string }> };
 
 const EXTENSION = ".md";
-const ROOT_MEMORY_NAME = "CLAUDE.md";
+
+// ── Pinned project memory files ────────────────────────────────────────
+// Key = stable identifier sent by client; Value = resolver + display name
+type MemoryKey = "root" | "claude-dir" | "local";
+const MEMORY_REGISTRY: Record<
+  MemoryKey,
+  { displayName: string; label: string; resolve: (projectPath: string) => string }
+> = {
+  root: {
+    displayName: "CLAUDE.md",
+    label: "Project memory (root)",
+    resolve: (p) => path.join(p, "CLAUDE.md"),
+  },
+  "claude-dir": {
+    displayName: ".claude/CLAUDE.md",
+    label: "Project memory (.claude/)",
+    resolve: (p) => path.join(p, ".claude", "CLAUDE.md"),
+  },
+  local: {
+    displayName: "CLAUDE.local.md",
+    label: "Local memory (git-ignored)",
+    resolve: (p) => path.join(p, "CLAUDE.local.md"),
+  },
+};
+const MEMORY_KEYS = Object.keys(MEMORY_REGISTRY) as MemoryKey[];
+const DISPLAY_TO_KEY = new Map<string, MemoryKey>(
+  MEMORY_KEYS.map((k) => [MEMORY_REGISTRY[k].displayName, k]),
+);
+
+function isMemoryKey(v: unknown): v is MemoryKey {
+  return typeof v === "string" && MEMORY_KEYS.includes(v as MemoryKey);
+}
 
 function rulesDir(projectPath: string) {
   return path.join(projectPath, ".claude", "rules");
 }
 
-function rootClaudeMd(projectPath: string) {
-  return path.join(projectPath, ROOT_MEMORY_NAME);
-}
-
-function isValidName(name: string): boolean {
+function isValidRegularName(name: string): boolean {
   const n = name.trim();
   return n.length > 0 && n !== "." && n !== ".." && !n.includes("/") && !n.includes("..");
-}
-
-function isRootMemoryRequest(name: string, pinned: unknown): boolean {
-  return name === ROOT_MEMORY_NAME && pinned === true;
 }
 
 async function resolveProject(id: string) {
@@ -33,7 +56,7 @@ async function resolveProject(id: string) {
   return db.select().from(projects).where(eq(projects.id, id)).get() ?? null;
 }
 
-// GET /api/projects/[id]/rules — list all rule files (root CLAUDE.md pinned first)
+// GET — pinned memory files first, then .claude/rules/*.md
 export async function GET(_req: NextRequest, { params }: Params) {
   const { id } = await params;
   const project = await resolveProject(id);
@@ -41,31 +64,45 @@ export async function GET(_req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
+  const pinnedEntries: Array<{
+    name: string;
+    content: string;
+    pinned: true;
+    memoryKey: MemoryKey;
+    label: string;
+  }> = [];
+  for (const key of MEMORY_KEYS) {
+    const reg = MEMORY_REGISTRY[key];
+    const filePath = reg.resolve(project.path);
+    if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) continue;
+    const content = readFileContent(filePath);
+    if (content === null) continue;
+    pinnedEntries.push({
+      name: reg.displayName,
+      content,
+      pinned: true,
+      memoryKey: key,
+      label: reg.label,
+    });
+  }
+
   const rulesList = listDirectoryFiles(rulesDir(project.path), EXTENSION);
 
-  const rootPath = rootClaudeMd(project.path);
-  let pinned: { name: string; content: string; pinned: true } | null = null;
-  if (fs.existsSync(rootPath) && fs.statSync(rootPath).isFile()) {
-    const content = readFileContent(rootPath);
-    if (content !== null) {
-      pinned = { name: ROOT_MEMORY_NAME, content, pinned: true };
+  // Warn on filename collision between pinned and rules/
+  for (const p of pinnedEntries) {
+    if (rulesList.some((f) => f.name === p.name)) {
+      console.warn(
+        `[rules] pinned ${p.name} and .claude/rules/${p.name} both exist — showing pinned only`,
+      );
     }
   }
-
-  if (pinned && rulesList.some((f) => f.name === ROOT_MEMORY_NAME)) {
-    console.warn(
-      `[rules] both ${rootPath} and .claude/rules/${ROOT_MEMORY_NAME} exist — showing root only`,
-    );
-  }
-
-  const combined = pinned
-    ? [pinned, ...rulesList.filter((f) => f.name !== ROOT_MEMORY_NAME)]
-    : rulesList;
+  const pinnedNames = new Set(pinnedEntries.map((p) => p.name));
+  const combined = [...pinnedEntries, ...rulesList.filter((f) => !pinnedNames.has(f.name))];
 
   return NextResponse.json(combined);
 }
 
-// POST /api/projects/[id]/rules — create a new rule file
+// POST — create a new rule file (or pinned memory file)
 export async function POST(req: NextRequest, { params }: Params) {
   const { id } = await params;
   const project = await resolveProject(id);
@@ -74,23 +111,56 @@ export async function POST(req: NextRequest, { params }: Params) {
   }
 
   const body = await req.json();
-  const { name, content, pinned } = body as { name?: string; content?: string; pinned?: boolean };
+  const { name, content, pinned, memoryKey } = body as {
+    name?: string;
+    content?: string;
+    pinned?: boolean;
+    memoryKey?: string;
+  };
 
-  if (!name || !isValidName(name)) {
-    return NextResponse.json({ error: "Invalid or missing name" }, { status: 400 });
-  }
   if (content === undefined || content === null) {
     return NextResponse.json({ error: "content is required" }, { status: 400 });
   }
 
-  // Root CLAUDE.md path: create at project root
-  if (name === ROOT_MEMORY_NAME && (pinned === true || !fs.existsSync(rulesDir(project.path)))) {
-    const rootPath = rootClaudeMd(project.path);
-    if (fileExists(rootPath)) {
-      return NextResponse.json({ error: "Root CLAUDE.md already exists" }, { status: 409 });
+  // Pinned memory write path — identified by memoryKey (preferred) or display name
+  if (pinned === true) {
+    const key: MemoryKey | undefined = isMemoryKey(memoryKey)
+      ? memoryKey
+      : name
+      ? DISPLAY_TO_KEY.get(name)
+      : undefined;
+    if (!key) {
+      return NextResponse.json({ error: "Unknown pinned memory key" }, { status: 400 });
     }
-    writeFileContent(rootPath, content);
-    return NextResponse.json({ name, content, pinned: true }, { status: 201 });
+    const reg = MEMORY_REGISTRY[key];
+    const filePath = reg.resolve(project.path);
+    if (fileExists(filePath)) {
+      return NextResponse.json({ error: `${reg.displayName} already exists` }, { status: 409 });
+    }
+    writeFileContent(filePath, content);
+    return NextResponse.json(
+      { name: reg.displayName, content, pinned: true, memoryKey: key, label: reg.label },
+      { status: 201 },
+    );
+  }
+
+  // Auto-route: "CLAUDE.md" / "CLAUDE.local.md" typed in New dialog → pinned create
+  if (name && DISPLAY_TO_KEY.has(name)) {
+    const key = DISPLAY_TO_KEY.get(name)!;
+    const reg = MEMORY_REGISTRY[key];
+    const filePath = reg.resolve(project.path);
+    if (fileExists(filePath)) {
+      return NextResponse.json({ error: `${reg.displayName} already exists` }, { status: 409 });
+    }
+    writeFileContent(filePath, content);
+    return NextResponse.json(
+      { name: reg.displayName, content, pinned: true, memoryKey: key, label: reg.label },
+      { status: 201 },
+    );
+  }
+
+  if (!name || !isValidRegularName(name)) {
+    return NextResponse.json({ error: "Invalid or missing name" }, { status: 400 });
   }
 
   const dir = rulesDir(project.path);
@@ -111,7 +181,7 @@ export async function POST(req: NextRequest, { params }: Params) {
   return NextResponse.json({ name, content }, { status: 201 });
 }
 
-// PUT /api/projects/[id]/rules — update an existing rule file
+// PUT — update an existing file (regular or pinned)
 export async function PUT(req: NextRequest, { params }: Params) {
   const { id } = await params;
   const project = await resolveProject(id);
@@ -120,23 +190,43 @@ export async function PUT(req: NextRequest, { params }: Params) {
   }
 
   const body = await req.json();
-  const { name, content, pinned } = body as { name?: string; content?: string; pinned?: boolean };
+  const { name, content, pinned, memoryKey } = body as {
+    name?: string;
+    content?: string;
+    pinned?: boolean;
+    memoryKey?: string;
+  };
 
-  if (!name || !isValidName(name)) {
-    return NextResponse.json({ error: "Invalid or missing name" }, { status: 400 });
-  }
   if (content === undefined || content === null) {
     return NextResponse.json({ error: "content is required" }, { status: 400 });
   }
 
-  // Pinned root CLAUDE.md → project root
-  if (isRootMemoryRequest(name, pinned)) {
-    const rootPath = rootClaudeMd(project.path);
-    if (!fileExists(rootPath)) {
-      return NextResponse.json({ error: "Root CLAUDE.md not found" }, { status: 404 });
+  if (pinned === true) {
+    const key: MemoryKey | undefined = isMemoryKey(memoryKey)
+      ? memoryKey
+      : name
+      ? DISPLAY_TO_KEY.get(name)
+      : undefined;
+    if (!key) {
+      return NextResponse.json({ error: "Unknown pinned memory key" }, { status: 400 });
     }
-    writeFileContent(rootPath, content);
-    return NextResponse.json({ name, content, pinned: true });
+    const reg = MEMORY_REGISTRY[key];
+    const filePath = reg.resolve(project.path);
+    if (!fileExists(filePath)) {
+      return NextResponse.json({ error: `${reg.displayName} not found` }, { status: 404 });
+    }
+    writeFileContent(filePath, content);
+    return NextResponse.json({
+      name: reg.displayName,
+      content,
+      pinned: true,
+      memoryKey: key,
+      label: reg.label,
+    });
+  }
+
+  if (!name || !isValidRegularName(name)) {
+    return NextResponse.json({ error: "Invalid or missing name" }, { status: 400 });
   }
 
   const filePath = path.join(rulesDir(project.path), name);
@@ -148,7 +238,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
   return NextResponse.json({ name, content });
 }
 
-// DELETE /api/projects/[id]/rules?name=xxx — delete a rule file
+// DELETE — regular rules only; pinned memory files are protected
 export async function DELETE(req: NextRequest, { params }: Params) {
   const { id } = await params;
   const project = await resolveProject(id);
@@ -158,13 +248,13 @@ export async function DELETE(req: NextRequest, { params }: Params) {
 
   const name = req.nextUrl.searchParams.get("name");
   const pinnedParam = req.nextUrl.searchParams.get("pinned") === "true";
-  if (!name || !isValidName(name)) {
+  if (!name || !isValidRegularName(name)) {
     return NextResponse.json({ error: "Invalid or missing name query param" }, { status: 400 });
   }
 
-  if (isRootMemoryRequest(name, pinnedParam)) {
+  if (pinnedParam || DISPLAY_TO_KEY.has(name)) {
     return NextResponse.json(
-      { error: "Root CLAUDE.md cannot be deleted from the UI — it is the project memory file" },
+      { error: "Project memory files cannot be deleted from the UI" },
       { status: 403 },
     );
   }

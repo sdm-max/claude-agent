@@ -73,6 +73,8 @@ interface FileEntry {
   name: string;
   content: string;
   pinned?: boolean;
+  memoryKey?: string;
+  label?: string;
 }
 
 interface Props {
@@ -177,7 +179,12 @@ export default function FileDirectoryEditor({
       const res = await fetch(apiBase, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: selectedName, content, pinned: selected?.pinned }),
+        body: JSON.stringify({
+          name: selectedName,
+          content,
+          pinned: selected?.pinned,
+          memoryKey: selected?.memoryKey,
+        }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -310,7 +317,7 @@ export default function FileDirectoryEditor({
                       : "hover:bg-accent text-foreground"
                   }`}
                   onClick={() => selectFile(file.name)}
-                  title={file.pinned ? "Project memory (root CLAUDE.md)" : undefined}
+                  title={file.label ?? (file.pinned ? "Project memory" : undefined)}
                 >
                   <span className="text-xs truncate min-w-0 flex-1 font-mono">
                     {file.pinned ? "📌 " : ""}

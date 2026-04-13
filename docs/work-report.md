@@ -1177,3 +1177,31 @@ $ curl -X POST .../rules -d '{"name":"CLAUDE.md","pinned":true,"content":"dup"}'
 - 수정: `src/components/editors/FileDirectoryEditor.tsx`
 - 수정: `docs/work-report.md`
 
+## 후속 확장 — 세 종류 메모리 파일 전부 pinned (2026-04-13)
+루트만 처리하면 `.claude/CLAUDE.md` 나 `CLAUDE.local.md` 를 쓰는 프로젝트가 연동 안 되는 문제 보고됨. 3종 모두 동일 파이프라인으로 pinned 처리.
+
+### 구현
+- `rules/route.ts` 에 `MEMORY_REGISTRY` 도입 (key: `root` / `claude-dir` / `local`)
+- GET: 3종 모두 존재 여부 검사 후 pinned 리스트에 prepend
+- POST/PUT: `memoryKey` (또는 display name) 로 파일 경로 해석
+- POST: New 다이얼로그에 `CLAUDE.md` / `CLAUDE.local.md` 입력 시 자동으로 pinned create 라우팅
+- DELETE: display name 일치 시 전부 403
+- `FileEntry` 에 `memoryKey`, `label` 필드 추가 — UI tooltip 이 "Project memory (root)" 식으로 구분 표시
+
+### 검증 증거
+```
+$ curl .../rules   # 3종 pinned 전부 포함
+[
+  {name:"CLAUDE.md", memoryKey:"root", label:"Project memory (root)", ...},
+  {name:".claude/CLAUDE.md", memoryKey:"claude-dir", label:"Project memory (.claude/)", ...},
+  {name:"CLAUDE.local.md", memoryKey:"local", label:"Local memory (git-ignored)", ...}
+]
+
+$ curl -X PUT .../rules -d '{"name":".claude/CLAUDE.md","pinned":true,"memoryKey":"claude-dir","content":"..."}'
+{"pinned":true,"memoryKey":"claude-dir",...}  ← .claude/CLAUDE.md 실제 갱신
+
+$ curl -X DELETE ".../rules?name=CLAUDE.local.md&pinned=true"
+{"error":"Project memory files cannot be deleted from the UI"}
+```
+`npx tsc --noEmit` 통과.
+
