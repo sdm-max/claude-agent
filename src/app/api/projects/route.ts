@@ -3,6 +3,7 @@ import { getDb } from "@/lib/db";
 import { projects, files } from "@/lib/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
+import { registerWatcher } from "@/lib/fs-watcher";
 
 // GET /api/projects — list all projects with file counts
 export async function GET() {
@@ -55,5 +56,10 @@ export async function POST(request: NextRequest) {
   }).run();
 
   const project = db.select().from(projects).where(eq(projects.id, id)).get();
+  try {
+    registerWatcher(id, projectPath);
+  } catch (e) {
+    console.warn("[projects.POST] watcher register failed:", e);
+  }
   return NextResponse.json(project, { status: 201 });
 }

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import CodeEditor from "./CodeEditor";
 import EditorToolbar from "./EditorToolbar";
+import { useProjectEvents } from "@/hooks/use-project-events";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -156,12 +157,19 @@ export default function FileDirectoryEditor({
     fetchFiles();
   }, [fetchFiles]);
 
-  // ── Auto-refresh on window focus (catches external filesystem changes) ──
+  // ── Auto-refresh on window focus (fallback if SSE dropped) ──────────────
   useEffect(() => {
     const onFocus = () => { void fetchFiles({ silent: true }); };
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
   }, [fetchFiles]);
+
+  // ── Real-time sync via SSE (fs-watcher push) ────────────────────────────
+  useProjectEvents(projectId, (event) => {
+    if (event.kind === type) {
+      void fetchFiles({ silent: true });
+    }
+  });
 
   // ── beforeunload guard ───────────────────────────────────────────────────
   useEffect(() => {

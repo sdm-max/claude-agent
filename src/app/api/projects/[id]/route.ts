@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { projects, files } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { registerWatcher, unregisterWatcher } from "@/lib/fs-watcher";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -41,6 +42,13 @@ export async function PUT(request: NextRequest, { params }: Params) {
     .run();
 
   const updated = db.select().from(projects).where(eq(projects.id, id)).get();
+  if (updated) {
+    try {
+      registerWatcher(id, updated.path);
+    } catch (e) {
+      console.warn("[projects.PUT] watcher register failed:", e);
+    }
+  }
   return NextResponse.json(updated);
 }
 
@@ -55,5 +63,10 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
   }
 
   db.delete(projects).where(eq(projects.id, id)).run();
+  try {
+    unregisterWatcher(id);
+  } catch (e) {
+    console.warn("[projects.DELETE] watcher unregister failed:", e);
+  }
   return NextResponse.json({ success: true });
 }

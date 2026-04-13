@@ -21,6 +21,7 @@
     "@codemirror/theme-one-dark": "^6.1.2",
     "@codemirror/view": "^6.36.0",
     "better-sqlite3": "^12.8.0",
+    "chokidar": "^5.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "codemirror": "^6.0.1",
