@@ -219,6 +219,35 @@ export function validateProjectAgents(
 }
 
 /**
+ * 참조 파일이 있는데 Read 툴이 없는 경우 경고.
+ * 참조 파일은 body의 "Read 툴로 읽을 것" 지시로 렌더되므로 Read 권한 필수.
+ */
+export function validateReferenceFiles(
+  fm: AgentFrontmatter,
+  referenceFiles: string[] | undefined
+): ValidationError[] {
+  const errors: ValidationError[] = [];
+  if (!referenceFiles || referenceFiles.length === 0) return errors;
+
+  const hasRead =
+    !fm.tools || fm.tools.length === 0 || fm.tools.includes("Read");
+  const readDisallowed = fm.disallowedTools?.includes("Read") ?? false;
+
+  if (!hasRead || readDisallowed) {
+    errors.push({
+      field: "referenceFiles",
+      message:
+        "referenceFiles set but Read tool not available — agent cannot load the referenced files",
+      messageKo:
+        "참조 파일이 지정되었지만 Read 툴이 없음 — 에이전트가 파일을 읽을 수 없습니다",
+      severity: "warning",
+    });
+  }
+
+  return errors;
+}
+
+/**
  * 프로필 잠금 필드 변경 검사
  */
 export function checkLockedFieldChanges(

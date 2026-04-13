@@ -140,7 +140,7 @@ export const creatorProfiles: GovernanceProfile[] = [
 3. 테스트 재실행 → 동일 결과 확인
 4. 작은 단위로 커밋 가능한 상태 유지`,
     lockedFields: ["isolation"],
-    referenceFiles: ["CLAUDE.md", "docs/coding-standards.md"],
+    referenceFiles: ["CLAUDE.md"],
   },
   {
     id: "creator-ui-component",
@@ -178,7 +178,7 @@ export const creatorProfiles: GovernanceProfile[] = [
 3. 새 컴포넌트 생성 (tsx + 타입)
 4. 스토리북/테스트 필요 시 함께 생성`,
     lockedFields: ["disallowedTools"],
-    referenceFiles: ["CLAUDE.md", "docs/design-system.md"],
+    referenceFiles: ["CLAUDE.md"],
   },
   {
     id: "creator-api-endpoint",
@@ -216,7 +216,7 @@ export const creatorProfiles: GovernanceProfile[] = [
 3. 라우트 핸들러 작성
 4. 인증/권한 미들웨어 적용
 5. 테스트 생성 및 실행`,
-    referenceFiles: ["CLAUDE.md", "docs/api-conventions.md"],
+    referenceFiles: ["CLAUDE.md"],
   },
   {
     id: "creator-full",

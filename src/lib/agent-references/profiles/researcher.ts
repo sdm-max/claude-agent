@@ -120,7 +120,7 @@ export const researcherProfiles: GovernanceProfile[] = [
 5. **Impact** — 영향 범위 (코드, 팀, 운영)
 6. **Open Questions** — 미해결 질문
 7. **Migration Plan** — 단계별 이행 계획`,
-    referenceFiles: ["CLAUDE.md", "docs/architecture.md"],
+    referenceFiles: ["CLAUDE.md"],
   },
   {
     id: "researcher-deep",

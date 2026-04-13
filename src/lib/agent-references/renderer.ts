@@ -95,19 +95,41 @@ function renderBody(template: string, vars: Record<string, string>): string {
 }
 
 /**
- * 참조 파일 목록을 body 상단에 삽입할 "## 참조 문서" 섹션으로 렌더링.
- * Claude Code의 `@path` 자동 로드 기능을 사용.
+ * 참조 파일 목록을 body 상단에 "## 참조 문서" 섹션으로 삽입.
+ *
+ * 주의: Claude Code의 `@path` 자동 import는 CLAUDE.md 전용 기능이며
+ * subagent body에서는 동작하지 않는다. 따라서 명시적으로 Read 툴을
+ * 사용하라는 지시 문구를 붙여 렌더링한다.
  */
 function renderReferenceSection(referenceFiles: string[]): string {
   if (!referenceFiles || referenceFiles.length === 0) return "";
-  const lines = ["## 참조 문서 (자동 로드)"];
+  const lines = ["## 참조 문서 (작업 시작 전 Read 툴로 반드시 읽을 것)"];
   for (const file of referenceFiles) {
-    const trimmed = file.trim();
+    const trimmed = file.trim().replace(/^@/, "");
     if (!trimmed) continue;
-    const path = trimmed.startsWith("@") ? trimmed : `@${trimmed}`;
-    lines.push(path);
+    lines.push(`- \`${trimmed}\``);
   }
   return lines.join("\n") + "\n\n";
+}
+
+/**
+ * body 문자열에서 "## 참조 문서..." 섹션을 파싱해 파일 경로 리스트와
+ * 섹션 제외한 본문을 반환. 편집 UI에서 round-trip을 위해 사용.
+ */
+export function parseReferenceSection(body: string): {
+  files: string[];
+  bodyWithoutRef: string;
+} {
+  const re = /## 참조 문서[^\n]*\n((?:[-*] [^\n]+\n?)*)\n?/;
+  const match = body.match(re);
+  if (!match) return { files: [], bodyWithoutRef: body };
+  const files: string[] = [];
+  for (const line of match[1].split("\n")) {
+    const m = line.match(/^[-*]\s+`?([^`\n]+?)`?\s*$/);
+    if (m) files.push(m[1].trim().replace(/^@/, ""));
+  }
+  const bodyWithoutRef = body.replace(re, "");
+  return { files, bodyWithoutRef };
 }
 
 /**

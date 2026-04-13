@@ -1,11 +1,14 @@
 "use client";
 
+import { useState } from "react";
 import type { AgentFrontmatter } from "@/lib/agent-references/types";
+import { parseReferenceSection } from "@/lib/agent-references/renderer";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 const AVAILABLE_TOOLS = [
   "Read", "Write", "Edit", "Bash", "Glob", "Grep",
@@ -43,14 +46,49 @@ interface Props {
   frontmatter: AgentFrontmatter;
   onChange: (fm: AgentFrontmatter) => void;
   lockedFields?: string[];
+  body?: string;
+  onBodyChange?: (body: string) => void;
 }
 
-export default function AgentSettingsForm({ frontmatter, onChange, lockedFields = [] }: Props) {
+export default function AgentSettingsForm({ frontmatter, onChange, lockedFields = [], body, onBodyChange }: Props) {
   const update = (partial: Partial<AgentFrontmatter>) => {
     onChange({ ...frontmatter, ...partial });
   };
 
   const isLocked = (field: string) => lockedFields.includes(field);
+
+  // ── 참조 문서 관리 ──
+  const parsed = body !== undefined ? parseReferenceSection(body) : { files: [], bodyWithoutRef: body ?? "" };
+  const referenceFiles = parsed.files;
+  const [newRefPath, setNewRefPath] = useState("");
+
+  const rebuildBody = (files: string[]) => {
+    if (!body || onBodyChange === undefined) return;
+    const cleaned = parsed.bodyWithoutRef;
+    if (files.length === 0) {
+      onBodyChange(cleaned);
+      return;
+    }
+    // body의 첫 번째 `# 제목` 뒤에 섹션 재삽입
+    const section =
+      "## 참조 문서 (작업 시작 전 Read 툴로 반드시 읽을 것)\n" +
+      files.map((f) => `- \`${f}\``).join("\n") +
+      "\n\n";
+    const m = cleaned.match(/^(#[^\n]*\n\n?)([\s\S]*)$/);
+    const next = m ? `${m[1]}${section}${m[2]}` : `${section}${cleaned}`;
+    onBodyChange(next);
+  };
+
+  const addRef = () => {
+    const p = newRefPath.trim().replace(/^@/, "");
+    if (!p || referenceFiles.includes(p)) return;
+    rebuildBody([...referenceFiles, p]);
+    setNewRefPath("");
+  };
+
+  const removeRef = (path: string) => {
+    rebuildBody(referenceFiles.filter((f) => f !== path));
+  };
 
   const toggleTool = (tool: string, list: "tools" | "disallowedTools") => {
     const current = frontmatter[list] ?? [];
@@ -240,6 +278,61 @@ export default function AgentSettingsForm({ frontmatter, onChange, lockedFields 
           </Field>
         </div>
       </Section>
+
+      {/* 참조 문서 — body에 Read 툴 지시 섹션으로 삽입됨 */}
+      {body !== undefined && onBodyChange !== undefined && (
+        <Section title="참조 문서 (작업 시작 전 Read 툴로 읽음)">
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">
+              에이전트가 작업을 시작하기 전에 Read 툴로 먼저 읽을 파일 경로를 지정합니다.
+              body의 `## 참조 문서` 섹션에 저장되며 일반 body 편집과 자동 동기화됩니다.
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {referenceFiles.length === 0 && (
+                <span className="text-xs text-muted-foreground">참조 파일 없음</span>
+              )}
+              {referenceFiles.map((path) => (
+                <span
+                  key={path}
+                  className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-border bg-muted/50 font-mono"
+                >
+                  {path}
+                  <button
+                    type="button"
+                    onClick={() => removeRef(path)}
+                    className="text-muted-foreground hover:text-destructive ml-0.5"
+                    aria-label={`${path} 제거`}
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <Input
+                placeholder="CLAUDE.md"
+                value={newRefPath}
+                onChange={(e) => setNewRefPath(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    addRef();
+                  }
+                }}
+                className="h-8 text-xs font-mono"
+              />
+              <Button type="button" size="sm" variant="outline" onClick={addRef} disabled={!newRefPath.trim()}>
+                추가
+              </Button>
+            </div>
+            {referenceFiles.length > 0 && !frontmatter.tools?.includes("Read") && frontmatter.tools && frontmatter.tools.length > 0 && (
+              <p className="text-xs text-yellow-500">
+                ⚠ 참조 파일이 지정되었지만 tools에 Read가 없습니다 — 에이전트가 파일을 읽을 수 없습니다
+              </p>
+            )}
+          </div>
+        </Section>
+      )}
     </div>
   );
 }

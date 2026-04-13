@@ -169,7 +169,7 @@ export default function CreateAgentDialog({ open, onClose, onCreate }: Props) {
           <div className="flex-1 overflow-hidden flex flex-col gap-3">
             {/* 참조 문서 관리 */}
             <div className="space-y-2">
-              <Label className="text-xs">참조 문서 (자동 로드 — @경로)</Label>
+              <Label className="text-xs">참조 문서 (작업 시작 전 Read 툴로 읽음)</Label>
               <div className="flex flex-wrap gap-1.5">
                 {referenceFiles.length === 0 && (
                   <p className="text-xs text-muted-foreground">참조 파일 없음 — 아래에 경로를 추가하세요</p>
@@ -179,7 +179,7 @@ export default function CreateAgentDialog({ open, onClose, onCreate }: Props) {
                     key={path}
                     className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-border bg-muted/50 font-mono"
                   >
-                    @{path}
+                    {path}
                     <button
                       type="button"
                       onClick={() => removeRef(path)}

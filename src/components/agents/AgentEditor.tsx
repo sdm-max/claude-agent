@@ -265,6 +265,8 @@ export default function AgentEditor({ projectId }: Props) {
                 <AgentSettingsForm
                   frontmatter={frontmatter}
                   onChange={setFrontmatter}
+                  body={body}
+                  onBodyChange={setBody}
                 />
               </TabsContent>
 
