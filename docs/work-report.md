@@ -1205,3 +1205,90 @@ $ curl -X DELETE ".../rules?name=CLAUDE.local.md&pinned=true"
 ```
 `npx tsc --noEmit` 통과.
 
+## 실시간 파일시스템 동기화 — chokidar + SSE (2026-04-14)
+
+### 배경 / 증상
+`test-ref-agent` 프로젝트의 Rules 탭을 열어둔 상태에서 터미널로 `CLAUDE.md` 를 생성했는데 UI 에 아무것도 안 나타남. 원인 추적: `FileDirectoryEditor` 가 마운트 시점에 한 번만 `fetchFiles()` 호출하고 그 뒤로 재fetch 경로가 전무.
+
+초기에 ↻ 버튼 + focus listener 로 때우려다 사용자 거절 — 근본 해결 요구. fs.watch/chokidar + SSE push 로 재설계.
+
+### 설계
+- 서버: chokidar 로 프로젝트별 watcher 등록, `EventEmitter` 버스로 pub/sub, (projectId,kind) 단위 200ms 디바운스, HMR 대비 `globalThis` 싱글턴
+- 전송: Next.js App Router `ReadableStream` 기반 SSE 엔드포인트 + 30s keepalive + `req.signal` abort 핸들러
+- 클라이언트: `EventSource` 훅 → `FileDirectoryEditor` 가 `event.kind === type` 일 때 `fetchFiles({silent:true})` 호출
+- Stale-safe: 재fetch 시 편집 중(`hasChanges`)이면 에디터 buffer 보존, 선택 파일이 응답에 없고 변경 없을 때만 에디터 닫힘
+
+### 구현 파일
+- 신규: `src/lib/fs-watcher/index.ts` — registry, bus, `classifyPath`, `registerWatcher`, `unregisterWatcher`, `subscribeToProject`, `ensureAllWatchersStarted`
+- 신규: `src/app/api/projects/[id]/events/route.ts` — SSE 스트림, `force-dynamic`
+- 신규: `src/hooks/use-project-events.ts` — EventSource 클라이언트 훅 (handler ref 로 재연결 회피)
+- 수정: `src/app/api/projects/route.ts` — POST 후 `registerWatcher`
+- 수정: `src/app/api/projects/[id]/route.ts` — PUT 후 re-register, DELETE 후 unregister
+- 수정: `src/components/editors/FileDirectoryEditor.tsx` — `useProjectEvents` 연결, 편집 중 buffer 보존 로직
+
+### 경로 분류 (`classifyPath`)
+- `CLAUDE.md`, `CLAUDE.local.md`, `.claude/CLAUDE.md` → `rules`
+- `.claude/rules/*.md` → `rules`
+- `.claude/agents/*.md` → `agents`
+- `.claude/hooks/*.sh` → `hooks`
+- `.claude/settings*.json` → `settings`
+
+### 패키지
+- 추가: `chokidar` (`npm i chokidar`)
+
+### 검증 증거
+```
+$ curl -sN http://localhost:3000/api/projects/slU6UiJ0Gmptwv5j2htvt/events &
+$ echo "test" > /Users/min/Documents/test-ref-agent/.claude/rules/sse-test.md
+$ echo "test2" > /Users/min/Documents/test-ref-agent/CLAUDE.local.md
+$ rm .../sse-test.md .../CLAUDE.local.md
+
+--- SSE output ---
+data: {"kind":"ready"}
+data: {"kind":"rules","relativePath":".claude/rules/sse-test.md","op":"add"}
+data: {"kind":"rules","relativePath":"CLAUDE.local.md","op":"add"}
+data: {"kind":"rules","relativePath":"CLAUDE.local.md","op":"unlink"}
+```
+`npx tsc --noEmit` 통과. 커밋: `b9c3319 feat(sync): real-time filesystem sync via chokidar + SSE`.
+
+## 미해결 — 파일 관리 이원화 구조 (2026-04-14, 차기 세션으로 인계)
+
+### 발견
+위 chokidar+SSE 작업 후 사용자가 "CLAUDE.md 탭 Local 스코프에 왜 CLAUDE.md 가 안 보이냐" 제보. 추적 결과 **앱 전체가 파일을 두 방식으로 관리하는 이원화 구조**임을 확인.
+
+**계열 A — DB `files` 테이블 경유**
+- `ClaudeMdEditor` (CLAUDE.md 탭, User/Project/Local 스코프)
+- 라우트: `/api/projects/[id]/files?type=claude-md&scope=...`
+- 디스크와 분리. "Import from disk" / "Export to disk" 버튼이 수동 동기화 흔적
+- Settings 탭도 같은 패턴일 가능성 높음 (미확인)
+
+**계열 B — 디스크 직접 read/write**
+- `FileDirectoryEditor` (Rules/Agents/Hooks 탭, pinned 메모리 포함)
+- 라우트: `/api/projects/[id]/{rules,agents,hooks}`
+- chokidar+SSE 실시간 동기화 완비 (위 작업으로 완성)
+
+### 충돌 증거
+같은 `CLAUDE.md` 파일이:
+- Rules 탭 → 📌 Project Memory 로 디스크에서 직접 보임 ✅
+- CLAUDE.md 탭 (Project 스코프) → DB 에 없으면 안 보임, Import 수동 클릭 필요 ❌
+
+### 권장 방향 (사용자 합의 전)
+**디스크 쪽으로 통일**
+- `ClaudeMdEditor` 를 디스크 직접 read/write 로 재작성
+  - User = `~/.claude/CLAUDE.md`, Project = `<proj>/CLAUDE.md`, Local = `<proj>/CLAUDE.local.md`
+- Import/Export 버튼 제거 (의미 소실)
+- fs-watcher SSE 자동 혜택 — 외부 변경 실시간 반영
+- Settings 탭 동일 패턴 확인 후 같이 통일
+- DB `files` 테이블은 버전 히스토리 용도로만 재정의하거나 마이그레이션
+
+### 차기 세션 시작 프로토콜
+1. **손대기 전에 매핑 먼저** — 파일을 다루는 모든 탭/라우트/컴포넌트 전수조사 표로 정리
+2. 사용자와 통일 방향 합의
+3. 한 PR 로 통일 구현
+4. 메모리 `project_file_management_duality.md` 참조
+
+### 직전 세션 실패 원인 (반복 금지)
+- Rules 탭 기준으로만 사고 → 다른 탭(CLAUDE.md, Settings) 같은 문제 있는지 확인 안 함
+- 증상 하나씩 때움 → pinned → chokidar+SSE → 이원화 발견. 매번 "이것도 있었네?" 반복
+- 같은 클래스 버그 전수조사 누락
+
