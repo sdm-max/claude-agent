@@ -1,89 +1,59 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { settings } from "@/lib/db/schema";
-import { eq, and, isNull } from "drizzle-orm";
+import { projects } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 import { getTemplateById } from "@/lib/templates";
 import { deepMergeSettings } from "@/lib/templates/merge";
 import { applyExtraFilesToProject } from "@/lib/templates/apply-files";
+import { resolveSettingsPath, readDisk, writeDiskWithSnapshot, type FileScope } from "@/lib/disk-files";
 import type { ClaudeSettings } from "@/lib/settings-schema";
 
 // POST /api/templates/[id]/apply
 // Body: { scope: "global" | "user" | "project" | "local", projectPath?: string, mode: "replace" | "merge" }
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
   const template = getTemplateById(id);
-
   if (!template) {
     return NextResponse.json({ error: "Template not found" }, { status: 404 });
   }
 
   const body = await request.json();
-  const { scope, projectPath, mode = "merge" } = body;
+  const scope = body.scope as FileScope | undefined;
+  const projectPath = body.projectPath as string | undefined;
+  const mode = (body.mode ?? "merge") as "merge" | "replace";
 
   if (!scope || !["global", "user", "project", "local"].includes(scope)) {
-    return NextResponse.json(
-      { error: "scope must be 'global', 'user', 'project', or 'local'" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "scope must be 'global', 'user', 'project', or 'local'" }, { status: 400 });
   }
-
   if ((scope === "project" || scope === "local") && !projectPath) {
-    return NextResponse.json(
-      { error: "projectPath required for project/local scope" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "projectPath required for project/local scope" }, { status: 400 });
   }
 
-  const db = getDb();
-  const now = Date.now();
+  let projectId: string | null = null;
+  if (projectPath) {
+    const project = getDb().select().from(projects).where(eq(projects.path, projectPath)).get();
+    projectId = project?.id ?? null;
+  }
 
-  const isGlobalOrUser = scope === "global" || scope === "user";
-  const existing = isGlobalOrUser
-    ? db
-        .select()
-        .from(settings)
-        .where(and(eq(settings.scope, scope), isNull(settings.projectPath)))
-        .get()
-    : db
-        .select()
-        .from(settings)
-        .where(
-          and(eq(settings.scope, scope), eq(settings.projectPath, projectPath!))
-        )
-        .get();
-
-  let finalConfig: ClaudeSettings;
-
-  if (mode === "merge" && existing) {
-    const existingConfig: ClaudeSettings = JSON.parse(existing.config || "{}");
-    finalConfig = deepMergeSettings(existingConfig, template.settings);
+  const target = resolveSettingsPath(scope, { projectPath, projectId });
+  const existingRaw = readDisk(target.absolutePath);
+  let merged: ClaudeSettings;
+  if (mode === "merge" && existingRaw) {
+    try {
+      merged = deepMergeSettings(JSON.parse(existingRaw) as ClaudeSettings, template.settings);
+    } catch {
+      merged = template.settings;
+    }
   } else {
-    finalConfig = template.settings;
+    merged = template.settings;
   }
 
-  const configStr = JSON.stringify(finalConfig, null, 2);
+  const configStr = JSON.stringify(merged, null, 2);
+  writeDiskWithSnapshot(target, configStr);
 
-  if (existing) {
-    db.update(settings)
-      .set({ config: configStr, updatedAt: now })
-      .where(eq(settings.id, existing.id))
-      .run();
-  } else {
-    db.insert(settings)
-      .values({
-        scope,
-        projectPath: isGlobalOrUser ? null : projectPath!,
-        config: configStr,
-        createdAt: now,
-        updatedAt: now,
-      })
-      .run();
-  }
-
-  // Apply CLAUDE.md extraFiles to project DB if project scope
   let savedFiles: string[] = [];
   if (projectPath && template.extraFiles) {
     savedFiles = applyExtraFilesToProject(projectPath, template.extraFiles);

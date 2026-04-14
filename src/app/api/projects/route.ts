@@ -1,28 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { projects, files } from "@/lib/db/schema";
-import { eq, sql } from "drizzle-orm";
+import { projects } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { registerWatcher } from "@/lib/fs-watcher";
+import { scanProjectFiles } from "@/lib/disk-files";
 
-// GET /api/projects — list all projects with file counts
+// GET /api/projects — list all projects with on-disk file counts
 export async function GET() {
   const db = getDb();
   const rows = db
-    .select({
-      id: projects.id,
-      name: projects.name,
-      path: projects.path,
-      description: projects.description,
-      createdAt: projects.createdAt,
-      updatedAt: projects.updatedAt,
-      fileCount: sql<number>`(SELECT COUNT(*) FROM files WHERE files.project_id = ${projects.id})`,
-    })
+    .select()
     .from(projects)
     .orderBy(projects.updatedAt)
     .all();
 
-  return NextResponse.json(rows);
+  return NextResponse.json(
+    rows.map((p) => ({
+      ...p,
+      fileCount: scanProjectFiles(p.path).length,
+    })),
+  );
 }
 
 // POST /api/projects — create project
