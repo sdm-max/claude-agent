@@ -6,15 +6,10 @@ import EditorToolbar from "./EditorToolbar";
 import VersionHistory from "./VersionHistory";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { useProjectEvents } from "@/hooks/use-project-events";
 
 const SCOPE_OPTIONS = ["user", "project", "local"] as const;
-
-interface FileRecord {
-  id: string;
-  content: string;
-  type: string;
-  scope: string;
-}
+type Scope = (typeof SCOPE_OPTIONS)[number];
 
 interface Props {
   projectId: string;
@@ -22,18 +17,15 @@ interface Props {
 }
 
 export default function ClaudeMdEditor({ projectId, onHasChanges }: Props) {
-  const [scope, setScope] = useState("project");
-  const [file, setFile] = useState<FileRecord | null>(null);
+  const [scope, setScope] = useState<Scope>("project");
   const [content, setContent] = useState("");
   const [savedContent, setSavedContent] = useState("");
+  const [relativePath, setRelativePath] = useState<string | null>(null);
+  const [exists, setExists] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
-  const [pendingScope, setPendingScope] = useState<string | null>(null);
-  const [importingMd, setImportingMd] = useState(false);
-  const [importResult, setImportResult] = useState<string | null>(null);
-  const [exportingMd, setExportingMd] = useState(false);
-  const [exportResult, setExportResult] = useState<string | null>(null);
+  const [pendingScope, setPendingScope] = useState<Scope | null>(null);
 
   const hasChanges = content !== savedContent;
 
@@ -46,19 +38,31 @@ export default function ClaudeMdEditor({ projectId, onHasChanges }: Props) {
     return () => window.removeEventListener("beforeunload", handler);
   }, [hasChanges]);
 
-  const loadFile = useCallback(async (s: string) => {
+  const loadFile = useCallback(async (s: Scope) => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/projects/${projectId}/files?type=claude-md&scope=${s}`);
+      const res = await fetch(`/api/projects/${projectId}/claudemd?scope=${s}`);
+      if (!res.ok) {
+        setContent(""); setSavedContent(""); setRelativePath(null); setExists(false);
+        return;
+      }
       const data = await res.json();
-      if (data.length > 0) { setFile(data[0]); setContent(data[0].content); setSavedContent(data[0].content); }
-      else { setFile(null); setContent(""); setSavedContent(""); }
+      setContent(data.content || "");
+      setSavedContent(data.content || "");
+      setRelativePath(data.relativePath);
+      setExists(!!data.exists);
     } finally { setLoading(false); }
   }, [projectId]);
 
   useEffect(() => { loadFile(scope); }, [scope, loadFile]);
 
-  const handleScopeChange = (newScope: string) => {
+  useProjectEvents(projectId, (event) => {
+    if (event.kind !== "claudemd") return;
+    if (hasChanges) return;
+    void loadFile(scope);
+  });
+
+  const handleScopeChange = (newScope: Scope) => {
     if (hasChanges) { setPendingScope(newScope); } else { setScope(newScope); }
   };
 
@@ -66,51 +70,22 @@ export default function ClaudeMdEditor({ projectId, onHasChanges }: Props) {
     if (pendingScope) { setScope(pendingScope); setPendingScope(null); }
   };
 
-  const importFromDisk = async () => {
-    setImportingMd(true);
-    setImportResult(null);
-    try {
-      const res = await fetch(`/api/projects/${projectId}/import-claudemd?scope=${scope}`, { method: "POST" });
-      const data = await res.json();
-      if (res.ok) {
-        setImportResult(`Imported from ${data.path}`);
-        loadFile(scope);
-      } else {
-        setImportResult(`Error: ${data.error}`);
-      }
-    } catch {
-      setImportResult("Import failed");
-    } finally { setImportingMd(false); }
-  };
-
-  const exportToDisk = async () => {
-    setExportingMd(true);
-    setExportResult(null);
-    try {
-      const res = await fetch(`/api/projects/${projectId}/export-claudemd?scope=${scope}`, { method: "POST" });
-      const data = await res.json();
-      if (res.ok) {
-        setExportResult(`Exported to ${data.path}`);
-      } else {
-        setExportResult(`Error: ${data.error}`);
-      }
-    } catch {
-      setExportResult("Export failed");
-    } finally { setExportingMd(false); }
-  };
-
   const save = async () => {
     setSaving(true);
     try {
-      if (file) {
-        const res = await fetch(`/api/projects/${projectId}/files/${file.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content }) });
-        if (!res.ok) { alert("Save failed"); return; }
-      } else {
-        const res = await fetch(`/api/projects/${projectId}/files`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "claude-md", scope, content }) });
-        if (!res.ok) { alert("Save failed"); return; }
-        setFile(await res.json());
+      const res = await fetch(`/api/projects/${projectId}/claudemd?scope=${scope}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || "Save failed");
+        return;
       }
+      const data = await res.json();
       setSavedContent(content);
+      setExists(!!data.exists);
     } finally { setSaving(false); }
   };
 
@@ -122,24 +97,13 @@ export default function ClaudeMdEditor({ projectId, onHasChanges }: Props) {
             {s.charAt(0).toUpperCase() + s.slice(1)}
           </Button>
         ))}
+        {relativePath && <span className="ml-2 text-xs text-muted-foreground">{relativePath}{!exists && " (new)"}</span>}
       </div>
       <EditorToolbar
         hasChanges={hasChanges}
         onSave={save}
-        onHistory={file ? () => setShowHistory(true) : undefined}
+        onHistory={relativePath ? () => setShowHistory(true) : undefined}
         saving={saving}
-        extraButtons={
-          <>
-            <Button variant="outline" size="sm" onClick={importFromDisk} disabled={importingMd || hasChanges}>
-              {importingMd ? "Importing..." : "Import from disk"}
-            </Button>
-            <Button variant="outline" size="sm" onClick={exportToDisk} disabled={exportingMd || hasChanges || !file}>
-              {exportingMd ? "Exporting..." : "Export to disk"}
-            </Button>
-            {importResult && <span className={`text-xs ${importResult.startsWith("Error") ? "text-destructive" : "text-green-400"}`}>{importResult}</span>}
-            {exportResult && <span className={`text-xs ${exportResult.startsWith("Error") ? "text-destructive" : "text-green-400"}`}>{exportResult}</span>}
-          </>
-        }
       />
 
       {loading ? (
@@ -161,10 +125,10 @@ export default function ClaudeMdEditor({ projectId, onHasChanges }: Props) {
         </DialogContent>
       </Dialog>
 
-      {file && (
+      {relativePath && (
         <VersionHistory
-          projectId={projectId}
-          fileId={file.id}
+          projectId={scope === "user" ? null : projectId}
+          relativePath={relativePath}
           open={showHistory}
           onClose={() => setShowHistory(false)}
           onRestore={(c) => setContent(c)}

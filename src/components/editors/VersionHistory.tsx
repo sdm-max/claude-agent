@@ -5,34 +5,70 @@ import CodeEditor from "./CodeEditor";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
-interface Version {
+interface VersionListItem {
   id: string;
-  content: string;
   createdAt: number;
+  relativePath: string;
+}
+
+interface VersionDetail extends VersionListItem {
+  content: string;
 }
 
 interface Props {
-  projectId: string;
-  fileId: string;
+  projectId: string | null;
+  relativePath: string;
   open: boolean;
   onClose: () => void;
   onRestore: (content: string) => void;
   language?: "markdown" | "json";
 }
 
-export default function VersionHistory({ projectId, fileId, open, onClose, onRestore, language = "markdown" }: Props) {
-  const [versions, setVersions] = useState<Version[]>([]);
-  const [selected, setSelected] = useState<Version | null>(null);
+export default function VersionHistory({ projectId, relativePath, open, onClose, onRestore, language = "markdown" }: Props) {
+  const [versions, setVersions] = useState<VersionListItem[]>([]);
+  const [selected, setSelected] = useState<VersionDetail | null>(null);
   const [loading, setLoading] = useState(false);
 
+  const listUrl = projectId
+    ? `/api/projects/${projectId}/versions?relativePath=${encodeURIComponent(relativePath)}`
+    : `/api/user/versions?relativePath=${encodeURIComponent(relativePath)}`;
+
   useEffect(() => {
-    if (!open || !fileId) return;
+    if (!open || !relativePath) return;
     setLoading(true);
-    fetch(`/api/projects/${projectId}/files/${fileId}/versions`)
+    fetch(listUrl)
       .then((r) => r.json())
-      .then((data) => { setVersions(data); setSelected(null); })
+      .then((data) => { setVersions(Array.isArray(data) ? data : []); setSelected(null); })
       .finally(() => setLoading(false));
-  }, [open, projectId, fileId]);
+  }, [open, listUrl, relativePath]);
+
+  const loadDetail = async (v: VersionListItem) => {
+    const detailUrl = projectId
+      ? `/api/projects/${projectId}/versions/${v.id}`
+      : `/api/user/versions/${v.id}`;
+    const res = await fetch(detailUrl);
+    if (res.ok) {
+      const data = await res.json();
+      setSelected({ id: v.id, createdAt: v.createdAt, relativePath: v.relativePath, content: data.content });
+    }
+  };
+
+  const restore = async () => {
+    if (!selected) return;
+    const url = projectId ? `/api/projects/${projectId}/versions` : `/api/user/versions`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ versionId: selected.id }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      onRestore(data.content || selected.content);
+      onClose();
+    } else {
+      alert("Restore failed");
+    }
+  };
 
   return (
     <Sheet open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
@@ -51,7 +87,7 @@ export default function VersionHistory({ projectId, fileId, open, onClose, onRes
               {versions.map((v) => (
                 <button
                   key={v.id}
-                  onClick={() => setSelected(v)}
+                  onClick={() => loadDetail(v)}
                   className={`w-full text-left px-4 py-2 text-sm hover:bg-muted transition-colors ${
                     selected?.id === v.id ? "bg-muted" : ""
                   }`}
@@ -67,7 +103,7 @@ export default function VersionHistory({ projectId, fileId, open, onClose, onRes
                   <span className="text-sm text-muted-foreground">
                     {new Date(selected.createdAt).toLocaleString("ko-KR")}
                   </span>
-                  <Button size="sm" onClick={() => { onRestore(selected.content); onClose(); }}>
+                  <Button size="sm" onClick={restore}>
                     Restore this version
                   </Button>
                 </div>
