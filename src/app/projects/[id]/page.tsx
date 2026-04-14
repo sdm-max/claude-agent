@@ -20,7 +20,7 @@ interface Project {
   name: string;
   path: string;
   description: string;
-  files: { id: string; type: string; scope: string; updatedAt: number }[];
+  files: { id: string; type: string; scope: string; relativePath: string; updatedAt: number }[];
 }
 
 type SettingsScope = "project" | "local" | "merged";
@@ -189,31 +189,9 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-medium">{f.type}</span>
                           <ScopeBadge scope={f.scope} />
+                          <span className="text-xs text-muted-foreground">{f.relativePath}</span>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-muted-foreground">{new Date(f.updatedAt).toLocaleDateString("ko-KR")}</span>
-                          <Button
-                            variant="ghost"
-                            size="xs"
-                            className="text-destructive hover:text-destructive hover:bg-destructive/10 h-6 w-6 p-0"
-                            onClick={async () => {
-                              if (!confirm("Delete this file?")) return;
-                              try {
-                                const res = await fetch(`/api/projects/${id}/files/${f.id}`, { method: "DELETE" });
-                                if (!res.ok) {
-                                  const data = await res.json().catch(() => ({}));
-                                  alert(data.error || "Delete failed");
-                                  return;
-                                }
-                                loadProject();
-                              } catch {
-                                alert("Delete failed");
-                              }
-                            }}
-                          >
-                            &times;
-                          </Button>
-                        </div>
+                        <span className="text-xs text-muted-foreground">{new Date(f.updatedAt).toLocaleDateString("ko-KR")}</span>
                       </div>
                     </CardContent>
                   </Card>

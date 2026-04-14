@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { projects, files } from "@/lib/db/schema";
+import { projects } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { registerWatcher, unregisterWatcher } from "@/lib/fs-watcher";
+import { scanProjectFiles } from "@/lib/disk-files";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -16,8 +17,21 @@ export async function GET(_req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const projectFiles = db.select().from(files).where(eq(files.projectId, id)).all();
-  return NextResponse.json({ ...project, files: projectFiles });
+  try {
+    registerWatcher(id, project.path);
+  } catch (e) {
+    console.warn("[projects.GET] watcher register failed:", e);
+  }
+
+  const scanned = scanProjectFiles(project.path).map((f) => ({
+    id: `${f.type}:${f.scope}:${f.relativePath}`,
+    type: f.type,
+    scope: f.scope,
+    relativePath: f.relativePath,
+    absolutePath: f.absolutePath,
+    updatedAt: f.updatedAt,
+  }));
+  return NextResponse.json({ ...project, files: scanned });
 }
 
 // PUT /api/projects/[id]

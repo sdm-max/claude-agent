@@ -195,6 +195,48 @@ export function listVersions(
     .all() as VersionRow[];
 }
 
+// ── Project scan ────────────────────────────────────────────────────────
+
+export interface ScannedFile {
+  type: "claude-md" | "settings";
+  scope: "project" | "local";
+  relativePath: string;
+  absolutePath: string;
+  updatedAt: number;
+}
+
+/**
+ * Scan a project directory for canonical Claude config files (CLAUDE.md
+ * variants and settings.json variants). Only files that exist on disk
+ * are returned.
+ */
+export function scanProjectFiles(projectPath: string): ScannedFile[] {
+  const candidates: Array<{ type: "claude-md" | "settings"; scope: "project" | "local"; rel: string }> = [
+    { type: "claude-md", scope: "project", rel: "CLAUDE.md" },
+    { type: "claude-md", scope: "local", rel: "CLAUDE.local.md" },
+    { type: "claude-md", scope: "project", rel: ".claude/CLAUDE.md" },
+    { type: "settings", scope: "project", rel: ".claude/settings.json" },
+    { type: "settings", scope: "local", rel: ".claude/settings.local.json" },
+  ];
+  const out: ScannedFile[] = [];
+  for (const c of candidates) {
+    const abs = path.join(projectPath, c.rel);
+    try {
+      const stat = fs.statSync(abs);
+      out.push({
+        type: c.type,
+        scope: c.scope,
+        relativePath: c.rel,
+        absolutePath: abs,
+        updatedAt: stat.mtimeMs,
+      });
+    } catch {
+      // missing — skip
+    }
+  }
+  return out;
+}
+
 export function getVersion(versionId: string): VersionRow | null {
   const db = getDb();
   const row = db
