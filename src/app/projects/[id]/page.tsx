@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
 import type { ClaudeSettings } from "@/lib/settings-schema";
+import { useProjectEvents } from "@/hooks/use-project-events";
 
 interface Project {
   id: string;
@@ -84,6 +85,12 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     try { setSettings(JSON.parse(rawContent)); setParseError(null); }
     catch (e) { setParseError(e instanceof Error ? e.message : "Invalid JSON"); }
   }, [rawContent]);
+
+  useProjectEvents(id, (event) => {
+    if (event.kind !== "settings") return;
+    if (hasChanges) return;
+    void loadSettings(settingsScope);
+  });
 
   useEffect(() => {
     if (!hasChanges) return;

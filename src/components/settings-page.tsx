@@ -7,6 +7,7 @@ import ScopeBadge from "./scope-badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import type { ClaudeSettings } from "@/lib/settings-schema";
+import { useHomeEvents } from "@/hooks/use-home-events";
 
 interface Props {
   scope: "global" | "user";
@@ -21,10 +22,6 @@ export default function SettingsPage({ scope, title }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [exporting, setExporting] = useState(false);
-  const [exportResult, setExportResult] = useState<string | null>(null);
-  const [importing, setImporting] = useState(false);
-  const [importResult, setImportResult] = useState<string | null>(null);
 
   const hasChanges = rawContent !== savedContent;
 
@@ -48,6 +45,12 @@ export default function SettingsPage({ scope, title }: Props) {
   }, [scope]);
 
   useEffect(() => { load(); }, [load]);
+
+  useHomeEvents((event) => {
+    if (event.kind !== "user-settings") return;
+    if (hasChanges) return;
+    void load();
+  });
 
   useEffect(() => {
     try { setSettings(JSON.parse(rawContent)); setParseError(null); }
@@ -82,39 +85,6 @@ export default function SettingsPage({ scope, title }: Props) {
     } finally { setSaving(false); }
   };
 
-  const exportToDisk = async () => {
-    setExporting(true);
-    setExportResult(null);
-    try {
-      const res = await fetch(`/api/settings/export?scope=${scope}`, { method: "POST" });
-      const data = await res.json();
-      if (res.ok) {
-        setExportResult(`Exported to ${data.path}`);
-      } else {
-        setExportResult(`Error: ${data.error}`);
-      }
-    } catch {
-      setExportResult("Export failed");
-    } finally { setExporting(false); }
-  };
-
-  const importFromDisk = async () => {
-    setImporting(true);
-    setImportResult(null);
-    try {
-      const res = await fetch(`/api/settings/import?scope=${scope}`, { method: "POST" });
-      const data = await res.json();
-      if (res.ok) {
-        setImportResult(`Imported from ${data.path}`);
-        load(); // reload settings from DB
-      } else {
-        setImportResult(`Error: ${data.error}`);
-      }
-    } catch {
-      setImportResult("Import failed");
-    } finally { setImporting(false); }
-  };
-
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between p-4 border-b border-border">
@@ -124,17 +94,9 @@ export default function SettingsPage({ scope, title }: Props) {
         </div>
         <div className="flex items-center gap-2">
           {hasChanges && <span className="text-xs text-yellow-400">Unsaved changes</span>}
-          <Button variant="outline" onClick={importFromDisk} disabled={importing || hasChanges}>
-            {importing ? "Importing..." : "Import from disk"}
-          </Button>
           <Button onClick={save} disabled={!hasChanges || saving}>
             {saving ? "Saving..." : "Save"}
           </Button>
-          <Button variant="outline" onClick={exportToDisk} disabled={exporting || hasChanges}>
-            {exporting ? "Exporting..." : "Export to disk"}
-          </Button>
-          {importResult && <span className={`text-xs ${importResult.startsWith("Error") ? "text-destructive" : "text-green-400"}`}>{importResult}</span>}
-          {exportResult && <span className={`text-xs ${exportResult.startsWith("Error") ? "text-destructive" : "text-green-400"}`}>{exportResult}</span>}
         </div>
       </div>
 
