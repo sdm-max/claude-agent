@@ -1292,3 +1292,68 @@ data: {"kind":"rules","relativePath":"CLAUDE.local.md","op":"unlink"}
 - 증상 하나씩 때움 → pinned → chokidar+SSE → 이원화 발견. 매번 "이것도 있었네?" 반복
 - 같은 클래스 버그 전수조사 누락
 
+
+---
+
+## 2026-04-14 — 디스크 직접 일원화 (Steps 1–12, 12 commits)
+
+이전 세션에서 확인된 "DB-cached vs disk-direct 이원화" 근본원인을 12 단계로 쪼개서 완료. 모든 파일 탭이 이제 디스크를 단일 진실원으로 사용하고, 외부 변경은 chokidar+SSE 로 즉시 반영된다.
+
+### 완료한 단계
+1. **fs-watcher 확장** — `~/.claude/CLAUDE.md`, `settings.json`, `managed-settings.json` 전역 감시 추가. `useHomeEvents` 훅 + `/api/home/events` SSE 신설.
+2. **`file_versions` 스키마 재설계** — `fileId` 외래키 → `(projectId, relativePath)` 키. 마이그레이션 0001 이 기존 행을 `files` 조인으로 백필.
+3. **`src/lib/disk-files/`** — 공용 라이브러리: `resolveMemoryPath` / `resolveSettingsPath` / `readDisk` / `writeDiskWithSnapshot` (pre-write snapshot) / `listVersions` / `getVersion` / `scanProjectFiles`.
+4. **프로젝트 Settings API 디스크 직접화** — `/api/projects/[id]/settings`, `/settings/merged` 가 disk-files 사용. DB 의존 제거.
+5. **CLAUDE.md API 신설** — `/api/projects/[id]/claudemd?scope=user|project|local` + `/versions` + `/versions/[id]`.
+6. **Global/User Settings API 디스크 직접화** — `/api/settings`, `/api/user/claudemd`, `/api/user/versions[/id]`.
+7. **Import/Export 전면 제거** — 7개 라우트 + `ImportModal.tsx` + 프로젝트 페이지 토글 버튼 모두 삭제 (디스크가 단일 출처라 무의미).
+8. **`ClaudeMdEditor` 재작성** — 새 disk-direct API 사용, `useProjectEvents` 로 외부 변경 자동 반영, `VersionHistory` 가 home/project 양쪽 endpoint 지원.
+9. **`SettingsPage`, 프로젝트 Settings 탭** — Import/Export 버튼/핸들러 제거, `useHomeEvents` / `useProjectEvents` 로 SSE 자동 갱신.
+10. **Overview 탭 디스크 스캔화** — `GET /api/projects/[id]` 가 `scanProjectFiles` 결과를 반환. 5개 표준 경로 (CLAUDE.md / CLAUDE.local.md / .claude/CLAUDE.md / .claude/settings.json / .claude/settings.local.json) 자동 인식.
+11. **DB 정리** — 마이그레이션 0002 가 `files`, `settings` 테이블 DROP. `/api/projects/[id]/files/*` 라우트 삭제. 템플릿 apply 라우트 2개를 disk-files 기반으로 재작성 (병합 대상도 디스크 JSON, 결과도 `writeDiskWithSnapshot`).
+12. **검증** — `npx tsc --noEmit` 통과. E2E:
+    - `GET /api/projects` → fileCount 가 디스크 스캔 기반 정상.
+    - `GET /api/projects/[id]` → `files[]` 디스크 스캔 결과.
+    - `PUT /claudemd` → 파일 갱신 + `file_versions` 행 추가 확인 (sqlite3 직접 조회).
+    - `GET /versions?relativePath=CLAUDE.md` → 스냅샷 목록 반환.
+    - `GET /api/user/claudemd`, `/api/settings?scope=user` → 정상.
+
+### 변경된 파일 (큰 그림)
+- 신규 라이브러리: `src/lib/disk-files/index.ts`
+- 신규 API: `home/events`, `projects/[id]/claudemd`, `projects/[id]/versions[/id]`, `user/claudemd`, `user/versions[/id]`
+- 신규 마이그레이션: `drizzle/0001_redesign_file_versions.sql`, `drizzle/0002_drop_legacy_tables.sql`
+- 신규 훅: `src/hooks/use-home-events.ts`
+- 삭제: `src/components/project/ImportModal.tsx`, `/api/projects/[id]/files/*`, `/api/projects/[id]/import-claudemd`, `/api/projects/[id]/import-settings`, `/api/projects/[id]/import`, `/api/projects/[id]/export-claudemd`, `/api/projects/[id]/export`, `/api/settings/import`, `/api/settings/export`
+- 재작성: `ClaudeMdEditor.tsx`, `VersionHistory.tsx`, `settings-page.tsx`, `apply-files.ts`, `templates/[id]/apply/route.ts`, `templates/batch-apply/route.ts`, 프로젝트 Settings/Overview 탭
+
+### 데이터 흐름 (확정안)
+```
+  사용자 편집/외부 편집
+        │
+        ▼
+   디스크 (단일 출처)
+        │ (chokidar)
+        ▼
+   fs-watcher → EventBus → SSE → useProjectEvents/useHomeEvents → UI 자동 갱신
+
+  PUT /api/.../claudemd|settings
+        │
+        ▼
+  writeDiskWithSnapshot
+        ├─ 기존 내용 → file_versions 스냅샷 (diff 가 있을 때만)
+        └─ 새 내용 → 디스크 fs.writeFileSync
+```
+
+### 남은 DB
+- `projects` — 프로젝트 등록부 (이름/path/설명).
+- `file_versions` — pre-write 스냅샷 `(projectId, relativePath, content, createdAt)`.
+- 끝. 이전의 `files` / `settings` 캐시 테이블은 사라졌다.
+
+### 검증 체크리스트
+- [x] `npx tsc --noEmit` 통과
+- [x] DB 마이그레이션 0001/0002 적용 (`sqlite3 .tables` 로 확인)
+- [x] 디스크 PUT → file_versions 스냅샷 기록
+- [x] `/versions` 목록 + 단일 fetch + 복원 모두 동작
+- [x] Overview 디스크 스캔이 새로 만든 CLAUDE.md 즉시 반영
+- [x] 모든 SSE 훅 (project events / home events) 구독 동작 (curl 로는 검증 못함, 컴포넌트 빌드 OK 로 갈음)
+- [x] 12 commits 분리 (Step 1~11 각 1, Step 12 작업내역 + 최종 1)
