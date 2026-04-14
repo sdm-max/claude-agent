@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { settings, projects } from "@/lib/db/schema";
-import { eq, and } from "drizzle-orm";
+import { projects } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
+import {
+  resolveSettingsPath,
+  readDisk,
+  writeDiskWithSnapshot,
+  diskExists,
+} from "@/lib/disk-files";
+import { registerWatcher } from "@/lib/fs-watcher";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -20,17 +27,26 @@ export async function GET(request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
   }
 
-  const row = db
-    .select()
-    .from(settings)
-    .where(and(eq(settings.scope, scope), eq(settings.projectPath, project.path)))
-    .get();
-
-  if (!row) {
-    return NextResponse.json({ id: null, scope, config: "{}", projectPath: project.path });
+  try {
+    registerWatcher(id, project.path);
+  } catch {
+    // best-effort
   }
 
-  return NextResponse.json(row);
+  const resolved = resolveSettingsPath(scope as "project" | "local", {
+    projectId: id,
+    projectPath: project.path,
+  });
+
+  const content = readDisk(resolved.absolutePath);
+  return NextResponse.json({
+    scope,
+    projectPath: project.path,
+    absolutePath: resolved.absolutePath,
+    relativePath: resolved.relativePath,
+    exists: content !== null,
+    config: content ?? "{}",
+  });
 }
 
 // PUT /api/projects/[id]/settings?scope=project|local
@@ -49,7 +65,7 @@ export async function PUT(request: NextRequest, { params }: Params) {
   }
 
   const body = await request.json();
-  const config = typeof body.config === "string" ? body.config : JSON.stringify(body.config);
+  const config = typeof body.config === "string" ? body.config : JSON.stringify(body.config, null, 2);
 
   try {
     JSON.parse(config);
@@ -57,30 +73,26 @@ export async function PUT(request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Invalid JSON in config" }, { status: 400 });
   }
 
-  const now = Date.now();
+  const resolved = resolveSettingsPath(scope as "project" | "local", {
+    projectId: id,
+    projectPath: project.path,
+  });
 
-  const existing = db
-    .select()
-    .from(settings)
-    .where(and(eq(settings.scope, scope), eq(settings.projectPath, project.path)))
-    .get();
-
-  if (existing) {
-    db.update(settings)
-      .set({ config, updatedAt: now })
-      .where(eq(settings.id, existing.id))
-      .run();
-  } else {
-    db.insert(settings)
-      .values({ scope, projectPath: project.path, config, createdAt: now, updatedAt: now })
-      .run();
+  try {
+    writeDiskWithSnapshot(resolved, config);
+  } catch (e) {
+    return NextResponse.json(
+      { error: `Failed to write settings: ${e instanceof Error ? e.message : String(e)}` },
+      { status: 500 },
+    );
   }
 
-  const updated = db
-    .select()
-    .from(settings)
-    .where(and(eq(settings.scope, scope), eq(settings.projectPath, project.path)))
-    .get();
-
-  return NextResponse.json(updated);
+  return NextResponse.json({
+    scope,
+    projectPath: project.path,
+    absolutePath: resolved.absolutePath,
+    relativePath: resolved.relativePath,
+    exists: diskExists(resolved.absolutePath),
+    config,
+  });
 }
