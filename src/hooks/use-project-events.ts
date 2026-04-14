@@ -2,7 +2,13 @@
 
 import { useEffect, useRef } from "react";
 
-export type ProjectEventKind = "rules" | "agents" | "hooks" | "settings" | "ready";
+export type ProjectEventKind =
+  | "rules"
+  | "agents"
+  | "hooks"
+  | "settings"
+  | "claudemd"
+  | "ready";
 
 export interface ProjectEvent {
   kind: ProjectEventKind;

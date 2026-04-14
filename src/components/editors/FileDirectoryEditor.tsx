@@ -165,8 +165,10 @@ export default function FileDirectoryEditor({
   }, [fetchFiles]);
 
   // ── Real-time sync via SSE (fs-watcher push) ────────────────────────────
+  // Rules tab also refreshes on "claudemd" events because it shows pinned
+  // memory files (CLAUDE.md / CLAUDE.local.md / .claude/CLAUDE.md).
   useProjectEvents(projectId, (event) => {
-    if (event.kind === type) {
+    if (event.kind === type || (type === "rules" && event.kind === "claudemd")) {
       void fetchFiles({ silent: true });
     }
   });
