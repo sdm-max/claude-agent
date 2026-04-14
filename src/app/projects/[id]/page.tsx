@@ -9,7 +9,6 @@ import ClaudeMdEditor from "@/components/editors/ClaudeMdEditor";
 import FileDirectoryEditor from "@/components/editors/FileDirectoryEditor";
 import HooksUnifiedEditor from "@/components/editors/HooksUnifiedEditor";
 import AgentEditor from "@/components/agents/AgentEditor";
-import ImportModal from "@/components/project/ImportModal";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
@@ -30,7 +29,6 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
-  const [showImport, setShowImport] = useState(false);
 
   // Settings state
   const [settingsScope, setSettingsScope] = useState<SettingsScope>("project");
@@ -42,10 +40,6 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [settingsError, setSettingsError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [exporting, setExporting] = useState(false);
-  const [exportResult, setExportResult] = useState<string | null>(null);
-  const [importingSettings, setImportingSettings] = useState(false);
-  const [importResult, setImportResult] = useState<string | null>(null);
 
   const hasChanges = rawContent !== savedContent;
   const isMergedView = settingsScope === "merged";
@@ -115,39 +109,6 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     } finally { setSaving(false); }
   };
 
-  const exportToDisk = async () => {
-    setExporting(true);
-    setExportResult(null);
-    try {
-      const res = await fetch(`/api/projects/${id}/export?scope=${settingsScope}`, { method: "POST" });
-      const data = await res.json();
-      if (res.ok) {
-        setExportResult(`Exported to ${data.path}`);
-      } else {
-        setExportResult(`Error: ${data.error}`);
-      }
-    } catch {
-      setExportResult("Export failed");
-    } finally { setExporting(false); }
-  };
-
-  const importSettingsFromDisk = async () => {
-    setImportingSettings(true);
-    setImportResult(null);
-    try {
-      const res = await fetch(`/api/projects/${id}/import-settings?scope=${settingsScope}`, { method: "POST" });
-      const data = await res.json();
-      if (res.ok) {
-        setImportResult(`Imported from ${data.path}`);
-        loadSettings(settingsScope);
-      } else {
-        setImportResult(`Error: ${data.error}`);
-      }
-    } catch {
-      setImportResult("Import failed");
-    } finally { setImportingSettings(false); }
-  };
-
   const handleScopeChange = (newScope: string) => {
     if (hasChanges && !confirm("You have unsaved changes. Switch scope anyway?")) return;
     setSettingsScope(newScope as SettingsScope);
@@ -208,7 +169,6 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
         <TabsContent value="overview" className="flex-1 overflow-y-auto p-6 space-y-6">
           {project.description && <p className="text-muted-foreground">{project.description}</p>}
-          <Button onClick={() => setShowImport(true)}>Import from disk</Button>
           <div>
             <h3 className="font-semibold mb-3">Config Files ({project.files.length})</h3>
             {project.files.length === 0 ? (
@@ -283,22 +243,14 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
             <div className="ml-auto flex items-center gap-2">
               {isMergedView && <span className="text-xs text-muted-foreground">Read-only</span>}
               {hasChanges && !isMergedView && <span className="text-xs text-yellow-400">Unsaved</span>}
-              <Button variant="outline" onClick={importSettingsFromDisk} disabled={importingSettings || hasChanges || isMergedView}>
-                {importingSettings ? "Importing..." : "Import from disk"}
-              </Button>
               <Button onClick={saveSettings} disabled={!hasChanges || saving || isMergedView}>
                 {saving ? "Saving..." : "Save"}
-              </Button>
-              <Button variant="outline" onClick={exportToDisk} disabled={exporting || hasChanges || isMergedView}>
-                {exporting ? "Exporting..." : "Export to disk"}
               </Button>
               {!isMergedView && (
                 <Button variant="outline" onClick={copyToOtherScope} disabled={hasChanges}>
                   Copy to {settingsScope === "project" ? "Local" : "Project"}
                 </Button>
               )}
-              {importResult && <span className={`text-xs ${importResult.startsWith("Error") ? "text-destructive" : "text-green-400"}`}>{importResult}</span>}
-              {exportResult && <span className={`text-xs ${exportResult.startsWith("Error") ? "text-destructive" : "text-green-400"}`}>{exportResult}</span>}
             </div>
           </div>
 
@@ -358,8 +310,6 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           />
         </TabsContent>
       </Tabs>
-
-      <ImportModal projectId={id} open={showImport} onClose={() => setShowImport(false)} onImported={loadProject} />
     </div>
   );
 }
