@@ -1,5 +1,6 @@
 import path from "path";
 import os from "os";
+import fs from "fs";
 import { EventEmitter } from "events";
 import chokidar, { type FSWatcher } from "chokidar";
 
@@ -57,17 +58,33 @@ const debounceMap: Map<string, NodeJS.Timeout> =
   (globalThis.__fsWatcherDebounce__ = new Map());
 
 // ── Path → kind classifier (project scope) ──────────────────────────────
+// Case-insensitive relative calculation so we survive case-insensitive
+// macOS filesystems where the DB-stored path and chokidar's canonical
+// event path may differ only in case.
+function relativeInsensitive(from: string, to: string): string | null {
+  const fromNorm = from.toLowerCase().replace(/\/+$/, "");
+  const toNorm = to.toLowerCase();
+  if (toNorm === fromNorm) return "";
+  if (toNorm.startsWith(fromNorm + path.sep)) {
+    return to.slice(fromNorm.length + 1);
+  }
+  return null;
+}
+
 function classifyProjectPath(projectPath: string, filePath: string): ProjectWatchKind | null {
-  const rel = path.relative(projectPath, filePath);
-  if (!rel || rel.startsWith("..")) return null;
+  const rel = relativeInsensitive(projectPath, filePath);
+  if (rel === null || rel === "") return null;
 
-  // Root-level memory files → show on Rules tab (pinned) AND CLAUDE.md tab
-  if (rel === "CLAUDE.md" || rel === "CLAUDE.local.md") return "claudemd";
+  // Filename casing is also canonicalized by macOS FSEvents, so we match
+  // case-insensitively throughout.
+  const relLower = rel.toLowerCase();
 
-  const parts = rel.split(path.sep);
+  if (relLower === "claude.md" || relLower === "claude.local.md") return "claudemd";
+
+  const parts = relLower.split(path.sep);
   if (parts[0] !== ".claude") return null;
 
-  if (parts[1] === "CLAUDE.md") return "claudemd";
+  if (parts[1] === "claude.md") return "claudemd";
   if (parts[1] === "rules" && parts[2]?.endsWith(".md")) return "rules";
   if (parts[1] === "agents" && parts[2]?.endsWith(".md")) return "agents";
   if (parts[1] === "hooks" && parts[2]?.endsWith(".sh")) return "hooks";
@@ -82,11 +99,12 @@ function classifyProjectPath(projectPath: string, filePath: string): ProjectWatc
 function classifyHomePath(filePath: string): HomeWatchKind | null {
   const home = os.homedir();
   const claudeDir = path.join(home, ".claude");
-  const rel = path.relative(claudeDir, filePath);
-  if (!rel || rel.startsWith("..")) return null;
+  const rel = relativeInsensitive(claudeDir, filePath);
+  if (rel === null || rel === "") return null;
 
-  if (rel === "CLAUDE.md") return "user-claudemd";
-  if (rel === "settings.json" || rel === "managed-settings.json") return "user-settings";
+  const relLower = rel.toLowerCase();
+  if (relLower === "claude.md") return "user-claudemd";
+  if (relLower === "settings.json" || relLower === "managed-settings.json") return "user-settings";
   return null;
 }
 
@@ -103,7 +121,17 @@ function emit(busKey: string, event: WatchEvent) {
 }
 
 // ── Register / unregister project watcher ──────────────────────────────
-export function registerWatcher(projectId: string, projectPath: string) {
+export function registerWatcher(projectId: string, projectPathInput: string) {
+  // Canonicalize case so chokidar's canonical event paths line up with
+  // path.relative() comparisons. The DB may hold a differently-cased
+  // path on case-insensitive filesystems (macOS HFS+/APFS).
+  let projectPath = projectPathInput;
+  try {
+    projectPath = fs.realpathSync(projectPathInput);
+  } catch {
+    // Path may not exist yet — fall back to the raw input.
+  }
+
   const existing = registry.get(projectId);
   if (existing) {
     if (existing.projectPath === projectPath) return;
@@ -111,18 +139,26 @@ export function registerWatcher(projectId: string, projectPath: string) {
     registry.delete(projectId);
   }
 
-  const targets = [
-    path.join(projectPath, "CLAUDE.md"),
-    path.join(projectPath, "CLAUDE.local.md"),
-    path.join(projectPath, ".claude"),
-  ];
-
-  const watcher = chokidar.watch(targets, {
+  // Watch the project root directory (not individual files) so chokidar
+  // keeps firing events across unlink/recreate cycles that `>` truncates
+  // produce. Depth 3 covers everything we care about:
+  //   <root>/CLAUDE.md                  (depth 1)
+  //   <root>/.claude/CLAUDE.md          (depth 2)
+  //   <root>/.claude/settings.json      (depth 2)
+  //   <root>/.claude/rules/foo.md       (depth 3)
+  //   <root>/.claude/agents/bar.md      (depth 3)
+  //   <root>/.claude/hooks/baz.sh       (depth 3)
+  const watcher = chokidar.watch(projectPath, {
     ignoreInitial: true,
     persistent: true,
+    depth: 3,
     ignored: (p: string) =>
-      p.includes(`${path.sep}node_modules${path.sep}`) ||
-      p.includes(`${path.sep}.git${path.sep}`),
+      p.includes(`${path.sep}node_modules`) ||
+      p.includes(`${path.sep}.git${path.sep}`) ||
+      p.endsWith(`${path.sep}.git`) ||
+      p.includes(`${path.sep}.next${path.sep}`) ||
+      p.includes(`${path.sep}dist${path.sep}`) ||
+      p.includes(`${path.sep}build${path.sep}`),
     awaitWriteFinish: {
       stabilityThreshold: 100,
       pollInterval: 50,
@@ -132,9 +168,10 @@ export function registerWatcher(projectId: string, projectPath: string) {
   const handle = (op: WatchEvent["op"]) => (filePath: string) => {
     const kind = classifyProjectPath(projectPath, filePath);
     if (!kind) return;
+    const rel = relativeInsensitive(projectPath, filePath) ?? filePath;
     emit(projectId, {
       kind,
-      relativePath: path.relative(projectPath, filePath),
+      relativePath: rel,
       op,
     });
   };
