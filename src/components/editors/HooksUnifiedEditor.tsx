@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import type { ClaudeSettings, HookRule, HookEvent } from "@/lib/settings-schema";
-import { HOOK_EVENTS } from "@/lib/settings-schema";
+import { HOOK_EVENTS, TOOL_NAMES } from "@/lib/settings-schema";
 
 interface Props {
   projectId: string;
@@ -65,7 +65,24 @@ export default function HooksUnifiedEditor({
     setSettings((prev) => ({ ...prev, hooks: cleaned }));
   };
 
+  const hasEmptyCommands = (): boolean => {
+    if (!settings.hooks) return false;
+    for (const rules of Object.values(settings.hooks)) {
+      if (!rules) continue;
+      for (const rule of rules) {
+        for (const hook of rule.hooks) {
+          if (hook.type === "command" && !hook.command.trim()) return true;
+        }
+      }
+    }
+    return false;
+  };
+
   const saveWiring = async () => {
+    if (hasEmptyCommands()) {
+      setSaveResult("Error: command가 비어있는 항목이 있습니다");
+      return;
+    }
     setSaving(true);
     setSaveResult(null);
     try {
@@ -239,20 +256,94 @@ function HookRuleRow({
   onUpdate: (rule: HookRule) => void;
   onRemove: () => void;
 }) {
+  const [showToolPicker, setShowToolPicker] = useState(false);
+  const selectedTools = (rule.matcher || "").split("|").filter(Boolean);
+
+  const toggleTool = (toolName: string) => {
+    const current = new Set(selectedTools);
+    if (current.has(toolName)) {
+      current.delete(toolName);
+    } else {
+      current.add(toolName);
+    }
+    const matcher = [...current].join("|") || undefined;
+    onUpdate({ ...rule, matcher });
+  };
+
   return (
     <div className="p-3 bg-muted/30 rounded-md border border-border space-y-2">
       {/* Matcher */}
-      <div className="flex items-center gap-2">
-        <Label className="text-xs shrink-0 w-16">Matcher</Label>
-        <Input
-          className="flex-1"
-          value={rule.matcher || ""}
-          onChange={(e) => onUpdate({ ...rule, matcher: e.target.value || undefined })}
-          placeholder="Tool pattern (e.g. Edit|Write|Bash)"
-        />
-        <Button variant="ghost" size="icon-xs" onClick={onRemove} className="text-destructive">
-          &times;
-        </Button>
+      <div className="space-y-1.5">
+        <div className="flex items-center gap-2">
+          <Label className="text-xs shrink-0 w-16">Matcher</Label>
+          <div
+            className="flex-1 min-h-[36px] flex items-center gap-1 flex-wrap px-2 py-1 rounded-md border border-border bg-background cursor-pointer"
+            onClick={() => setShowToolPicker(!showToolPicker)}
+          >
+            {selectedTools.length > 0 ? (
+              selectedTools.map((t) => (
+                <Badge key={t} variant="secondary" className="text-xs gap-1">
+                  {t}
+                  <span
+                    className="cursor-pointer hover:text-destructive"
+                    onClick={(e) => { e.stopPropagation(); toggleTool(t); }}
+                  >
+                    ×
+                  </span>
+                </Badge>
+              ))
+            ) : (
+              <span className="text-xs text-muted-foreground">도구를 선택하세요 (클릭)</span>
+            )}
+          </div>
+          <Button variant="ghost" size="icon-xs" onClick={onRemove} className="text-destructive">
+            &times;
+          </Button>
+        </div>
+        {showToolPicker && (
+          <div className="ml-[4.5rem] grid grid-cols-3 gap-1 p-2 rounded-md border border-border bg-card">
+            {TOOL_NAMES.map((tool) => {
+              const isSelected = selectedTools.includes(tool.value);
+              return (
+                <button
+                  key={tool.value}
+                  type="button"
+                  className={`flex items-center gap-1.5 px-2 py-1 rounded text-xs text-left transition-colors ${
+                    isSelected
+                      ? "bg-primary/10 text-primary border border-primary/30"
+                      : "hover:bg-accent border border-transparent"
+                  }`}
+                  onClick={() => toggleTool(tool.value)}
+                >
+                  <span className={`size-3 rounded-sm border flex items-center justify-center ${
+                    isSelected ? "bg-primary border-primary text-primary-foreground" : "border-muted-foreground"
+                  }`}>
+                    {isSelected && <span className="text-[8px]">✓</span>}
+                  </span>
+                  <span className="font-medium">{tool.label}</span>
+                  <span className="text-muted-foreground ml-auto">{tool.description}</span>
+                </button>
+              );
+            })}
+            <div className="col-span-3 mt-1 pt-1 border-t border-border">
+              <Input
+                className="text-xs"
+                placeholder="MCP 도구 패턴 직접 입력 (예: mcp__github__.*)"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    const input = e.currentTarget.value.trim();
+                    if (input) {
+                      const current = new Set(selectedTools);
+                      current.add(input);
+                      onUpdate({ ...rule, matcher: [...current].join("|") });
+                      e.currentTarget.value = "";
+                    }
+                  }
+                }}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Commands */}

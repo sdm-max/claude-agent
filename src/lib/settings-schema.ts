@@ -250,6 +250,21 @@ export const OUTPUT_FORMAT_OPTIONS = ["text", "json", "stream-json"] as const;
 
 export const HOOK_TYPES = ["command", "http", "prompt", "agent"] as const;
 
+// Claude Code 내장 도구 이름 목록 (hooks matcher에서 사용)
+export const TOOL_NAMES = [
+  { value: "Bash", label: "Bash", description: "셸 명령 실행" },
+  { value: "Read", label: "Read", description: "파일 읽기" },
+  { value: "Write", label: "Write", description: "파일 생성/덮어쓰기" },
+  { value: "Edit", label: "Edit", description: "파일 부분 수정" },
+  { value: "Glob", label: "Glob", description: "파일 패턴 검색" },
+  { value: "Grep", label: "Grep", description: "파일 내용 검색" },
+  { value: "WebFetch", label: "WebFetch", description: "웹 페이지 가져오기" },
+  { value: "WebSearch", label: "WebSearch", description: "웹 검색" },
+  { value: "Agent", label: "Agent", description: "서브에이전트 실행" },
+  { value: "AskUserQuestion", label: "AskUserQuestion", description: "사용자 질문" },
+  { value: "ExitPlanMode", label: "ExitPlanMode", description: "플랜 모드 종료" },
+] as const;
+
 export function getDefaultSettings(): ClaudeSettings {
   return {};
 }
