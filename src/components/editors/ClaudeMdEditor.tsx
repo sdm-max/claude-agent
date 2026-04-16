@@ -13,12 +13,13 @@ const SCOPE_OPTIONS = ["user", "project", "local"] as const;
 type Scope = (typeof SCOPE_OPTIONS)[number];
 
 interface Props {
-  projectId: string;
+  projectId?: string | null;
+  fixedScope?: Scope;
   onHasChanges?: (v: boolean) => void;
 }
 
-export default function ClaudeMdEditor({ projectId, onHasChanges }: Props) {
-  const [scope, setScope] = useState<Scope>("project");
+export default function ClaudeMdEditor({ projectId, fixedScope, onHasChanges }: Props) {
+  const [scope, setScope] = useState<Scope>(fixedScope ?? "project");
   const [content, setContent] = useState("");
   const [savedContent, setSavedContent] = useState("");
   const [relativePath, setRelativePath] = useState<string | null>(null);
@@ -46,7 +47,10 @@ export default function ClaudeMdEditor({ projectId, onHasChanges }: Props) {
   const loadFile = useCallback(async (s: Scope) => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/projects/${projectId}/claudemd?scope=${s}`);
+      const url = projectId
+        ? `/api/projects/${projectId}/claudemd?scope=${s}`
+        : `/api/user/claudemd`;
+      const res = await fetch(url);
       if (!res.ok) {
         setContent(""); setSavedContent(""); setRelativePath(null); setExists(false);
         return;
@@ -61,7 +65,8 @@ export default function ClaudeMdEditor({ projectId, onHasChanges }: Props) {
 
   useEffect(() => { loadFile(scope); }, [scope, loadFile]);
 
-  useProjectEvents(projectId, (event) => {
+  useProjectEvents(projectId ?? "", (event) => {
+    if (!projectId) return;
     if (event.kind !== "claudemd") return;
     if (scopeRef.current === "user") return;
     if (hasChangesRef.current) return;
@@ -103,7 +108,10 @@ export default function ClaudeMdEditor({ projectId, onHasChanges }: Props) {
   const save = async () => {
     setSaving(true);
     try {
-      const res = await fetch(`/api/projects/${projectId}/claudemd?scope=${scope}`, {
+      const saveUrl = projectId
+        ? `/api/projects/${projectId}/claudemd?scope=${scope}`
+        : `/api/user/claudemd`;
+      const res = await fetch(saveUrl, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content }),
@@ -121,14 +129,16 @@ export default function ClaudeMdEditor({ projectId, onHasChanges }: Props) {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center gap-2 px-4 py-2 border-b border-border">
-        {SCOPE_OPTIONS.map((s) => (
-          <Button key={s} variant={scope === s ? "secondary" : "ghost"} size="sm" onClick={() => handleScopeChange(s)}>
-            {s.charAt(0).toUpperCase() + s.slice(1)}
-          </Button>
-        ))}
-        {relativePath && <span className="ml-2 text-xs text-muted-foreground">{relativePath}{!exists && " (new)"}</span>}
-      </div>
+      {!fixedScope && (
+        <div className="flex items-center gap-2 px-4 py-2 border-b border-border">
+          {SCOPE_OPTIONS.map((s) => (
+            <Button key={s} variant={scope === s ? "secondary" : "ghost"} size="sm" onClick={() => handleScopeChange(s)}>
+              {s.charAt(0).toUpperCase() + s.slice(1)}
+            </Button>
+          ))}
+          {relativePath && <span className="ml-2 text-xs text-muted-foreground">{relativePath}{!exists && " (new)"}</span>}
+        </div>
+      )}
       <EditorToolbar
         hasChanges={hasChanges}
         onSave={save}
@@ -157,7 +167,7 @@ export default function ClaudeMdEditor({ projectId, onHasChanges }: Props) {
 
       {relativePath && (
         <VersionHistory
-          projectId={scope === "user" ? null : projectId}
+          projectId={scope === "user" ? null : (projectId ?? null)}
           relativePath={relativePath}
           open={showHistory}
           onClose={() => setShowHistory(false)}

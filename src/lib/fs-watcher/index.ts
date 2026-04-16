@@ -8,7 +8,7 @@ import chokidar, { type FSWatcher } from "chokidar";
 // Project-scoped kinds (emitted on project bus via projectId).
 export type ProjectWatchKind = "rules" | "agents" | "hooks" | "settings" | "claudemd";
 // Home-scoped kinds (emitted on HOME_BUS_KEY bus, shared across all clients).
-export type HomeWatchKind = "user-settings" | "user-claudemd";
+export type HomeWatchKind = "user-settings" | "user-claudemd" | "user-hooks" | "user-rules" | "user-agents";
 export type WatchKind = ProjectWatchKind | HomeWatchKind;
 
 export interface WatchEvent {
@@ -105,6 +105,12 @@ function classifyHomePath(filePath: string): HomeWatchKind | null {
   const relLower = rel.toLowerCase();
   if (relLower === "claude.md") return "user-claudemd";
   if (relLower === "settings.json" || relLower === "managed-settings.json") return "user-settings";
+
+  const parts = relLower.split(path.sep);
+  if (parts[0] === "hooks" && parts[1]?.endsWith(".sh")) return "user-hooks";
+  if (parts[0] === "rules" && parts[1]?.endsWith(".md")) return "user-rules";
+  if (parts[0] === "agents" && parts[1]?.endsWith(".md")) return "user-agents";
+
   return null;
 }
 
@@ -201,16 +207,16 @@ function ensureHomeWatcherStarted() {
   globalThis.__fsWatcherHomeStarted__ = true;
 
   const home = os.homedir();
-  const targets = [
-    path.join(home, ".claude", "CLAUDE.md"),
-    path.join(home, ".claude", "settings.json"),
-    path.join(home, ".claude", "managed-settings.json"),
-  ];
+  const claudeDir = path.join(home, ".claude");
 
   try {
-    const watcher = chokidar.watch(targets, {
+    const watcher = chokidar.watch(claudeDir, {
       ignoreInitial: true,
       persistent: true,
+      depth: 2,
+      ignored: (p: string) =>
+        p.includes(`${path.sep}node_modules`) ||
+        p.includes(`${path.sep}.git${path.sep}`),
       awaitWriteFinish: {
         stabilityThreshold: 100,
         pollInterval: 50,

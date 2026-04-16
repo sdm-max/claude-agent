@@ -12,9 +12,9 @@ import type { ClaudeSettings, HookRule, HookEvent } from "@/lib/settings-schema"
 import { HOOK_EVENTS, TOOL_NAMES } from "@/lib/settings-schema";
 
 interface Props {
-  projectId: string;
-  settingsScope: "project" | "local";
-  projectPath: string;
+  projectId?: string | null;
+  settingsScope: "project" | "local" | "user";
+  projectPath?: string | null;
   initialSettings: ClaudeSettings;
   onSettingsSaved: (updated: ClaudeSettings) => void;
 }
@@ -39,10 +39,11 @@ function buildScriptPath(projectPath: string, scriptName: string): string {
 export default function HooksUnifiedEditor({
   projectId,
   settingsScope,
-  projectPath,
+  projectPath: projectPathProp,
   initialSettings,
   onSettingsSaved,
 }: Props) {
+  const projectPath = projectPathProp ?? "";
   const [settings, setSettings] = useState<ClaudeSettings>(initialSettings);
   const [savedSettings, setSavedSettings] = useState<ClaudeSettings>(initialSettings);
   const [availableScripts, setAvailableScripts] = useState<string[]>([]);
@@ -87,7 +88,10 @@ export default function HooksUnifiedEditor({
     setSaveResult(null);
     try {
       const fullSettings = { ...settings };
-      const res = await fetch(`/api/projects/${projectId}/settings?scope=${settingsScope}`, {
+      const url = projectId
+        ? `/api/projects/${projectId}/settings?scope=${settingsScope}`
+        : `/api/settings?scope=user`;
+      const res = await fetch(url, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ config: JSON.stringify(fullSettings, null, 2) }),
@@ -113,7 +117,7 @@ export default function HooksUnifiedEditor({
       {/* Left: Script file editor */}
       <div className="w-[45%] shrink-0 border-r border-border overflow-hidden">
         <FileDirectoryEditor
-          projectId={projectId}
+          projectId={projectId ?? null}
           type="hooks"
           fileExtension=".sh"
           editorLanguage="shell"

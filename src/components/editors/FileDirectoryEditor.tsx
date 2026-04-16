@@ -5,6 +5,7 @@ import CodeEditor from "./CodeEditor";
 import EditorToolbar from "./EditorToolbar";
 import VersionHistory from "./VersionHistory";
 import { useProjectEvents } from "@/hooks/use-project-events";
+import { useHomeEvents } from "@/hooks/use-home-events";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -80,7 +81,8 @@ interface FileEntry {
 }
 
 interface Props {
-  projectId: string;
+  projectId?: string | null;
+  apiBase?: string;
   type: "agents" | "rules" | "hooks";
   fileExtension: string;
   editorLanguage: "markdown" | "shell";
@@ -89,6 +91,7 @@ interface Props {
 
 export default function FileDirectoryEditor({
   projectId,
+  apiBase: apiBaseProp,
   type,
   fileExtension,
   editorLanguage,
@@ -116,7 +119,7 @@ export default function FileDirectoryEditor({
   const selectedNameRef = useRef(selectedName);
   useEffect(() => { selectedNameRef.current = selectedName; }, [selectedName]);
 
-  const apiBase = `/api/projects/${projectId}/${type}`;
+  const apiBase = apiBaseProp ?? (projectId ? `/api/projects/${projectId}/${type}` : `/api/user/${type}`);
 
   // ── Fetch file list ──────────────────────────────────────────────────────
   // silent=true skips alert on error (used by focus listener) and skips spinner
@@ -174,8 +177,16 @@ export default function FileDirectoryEditor({
   // ── Real-time sync via SSE (fs-watcher push) ────────────────────────────
   // Rules tab also refreshes on "claudemd" events because it shows pinned
   // memory files (CLAUDE.md / CLAUDE.local.md / .claude/CLAUDE.md).
-  useProjectEvents(projectId, (event) => {
+  useProjectEvents(projectId ?? "", (event) => {
+    if (!projectId) return;
     if (event.kind === type || (type === "rules" && event.kind === "claudemd")) {
+      void fetchFiles({ silent: true });
+    }
+  });
+
+  useHomeEvents((event) => {
+    if (projectId) return;
+    if (event.kind === `user-${type}`) {
       void fetchFiles({ silent: true });
     }
   });
@@ -438,8 +449,8 @@ export default function FileDirectoryEditor({
               />
             </div>
             <VersionHistory
-              projectId={projectId}
-              relativePath={`.claude/${type}/${selectedName}`}
+              projectId={projectId ?? null}
+              relativePath={projectId ? `.claude/${type}/${selectedName}` : `~/.claude/${type}/${selectedName}`}
               open={showHistory}
               onClose={() => setShowHistory(false)}
               onRestore={(c) => setContent(c)}
