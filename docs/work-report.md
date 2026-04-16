@@ -1499,3 +1499,80 @@ for (const ef of extraFiles) {
 | 12 | 회귀: `hooks.PreToolUse` concat 기존 동작 유지 | PASS |
 | 13 | 회귀: `mcpServers` shallow merge 기존 동작 유지 | PASS |
 | 14 | 회귀: `CLAUDE.md` extraFile 기존 동작 유지 | PASS |
+
+---
+
+## 2026-04-16 세션 2: 회귀 검증 완료 + Hooks UI 수정 + 백로그 확장
+
+### 작업 요약
+1. 시나리오 8~10 회귀 검증 완료 (전체 1~10 PASS)
+2. Hooks 탭 수동 편집 UI 수정 (matcher 도구 선택 체크박스)
+3. UX 문제 발견 및 백로그 B-3~B-6 추가
+
+### 시나리오 8~10 회귀 검증
+
+#### 시나리오 8 — 템플릿 적용이 디스크에 직접 쓰는지
+
+| 테스트 | 내용 | 결과 |
+|--------|------|------|
+| A | Settings 머지 — `security-sandbox` Apply → `{}` 에서 `sandbox` 블록 추가, History에 이전 `{}` 스냅샷 | PASS |
+| B | CLAUDE.md 생성 — `claudemd-nextjs` Apply → `# test` 에서 Next.js 템플릿으로 교체, History에 이전 내용 스냅샷 | PASS |
+| C | extraFiles — `hooks-auto-lint` Apply → `auto-lint.sh` 파일 디스크 생성 + Settings에 `hooks.PostToolUse` 머지 | PASS |
+
+#### 시나리오 9 — DB `.tables` 정리
+```
+__drizzle_migrations  file_versions  projects
+```
+`files`, `settings` 테이블 없음 — **PASS**
+
+#### 시나리오 10 — 죽은 라우트 404
+| 라우트 | 응답 |
+|--------|------|
+| `/api/projects/.../files` | 404 |
+| `/api/projects/.../import-claudemd` | 404 |
+| `/api/projects/.../export-claudemd` | 404 |
+| `/api/settings/import` | 404 |
+| `/api/settings/export` | 404 |
+
+전부 404 — **PASS**
+
+### Hooks UI 수정
+
+#### 문제
+Hooks 탭 Hook Wiring에서 `+ Rule` 클릭 시:
+- `matcher`: 빈 자유 텍스트 Input — 사용자가 도구 이름을 모르면 유효한 훅 생성 불가
+- `command`: 빈 문자열로 저장 가능 — 동작하지 않는 훅 생성됨
+
+#### 수정 내용
+
+**`src/lib/settings-schema.ts`**:
+- `TOOL_NAMES` 상수 추가 — 11개 Claude Code 내장 도구 (Bash, Read, Edit, Write, Glob, Grep, WebFetch, WebSearch, Agent, AskUserQuestion, ExitPlanMode) + 한글 설명
+
+**`src/components/editors/HooksUnifiedEditor.tsx`**:
+- matcher: 자유 텍스트 Input → 도구 체크박스 그리드로 변경
+  - 클릭하면 11개 도구 목록이 3열 그리드로 열림
+  - 체크하면 `Edit|Write|Bash` 형태로 자동 조합
+  - MCP 도구는 하단 입력창에서 직접 입력 (Enter로 추가)
+  - 선택된 도구는 Badge로 표시, × 클릭으로 개별 제거
+- 빈 command 저장 차단: `hasEmptyCommands()` 검증 추가, 빈 command 있으면 에러 메시지 표시 + 저장 안 됨
+
+### 발견된 UX 문제 + 백로그 추가
+
+| 백로그 | 제목 | 우선순위 | 내용 |
+|--------|------|----------|------|
+| B-3 | Settings JSON 주석 지원 | medium | JSON 모드에서 각 필드 설명 없음 |
+| B-4 | 템플릿 선택 적용 + 적용 흔적 표시 | high | 일괄 Apply만 가능, 항목별 체크 선택 불가, 적용 후 출처 표시 없음, Undo 없음 |
+| B-5 | Hooks 수동 편집 UX 강화 | medium | command 프리셋, http/prompt/agent 타입 미구현 |
+| B-6 | deny 권한 설정 경고 + 복원 UX | medium | deny 설정 시 경고 없음, 잠기면 풀 방법 없음 |
+
+### 수정 파일 목록
+
+| 파일 | 변경 |
+|------|------|
+| `src/lib/settings-schema.ts` | `TOOL_NAMES` 상수 추가 |
+| `src/components/editors/HooksUnifiedEditor.tsx` | matcher 체크박스 UI + 빈 command 저장 차단 |
+| `docs/backlog.md` | B-4, B-5, B-6 추가 |
+| `docs/work-report.md` | 본 항목 |
+
+### 빌드 확인
+- `npx tsc --noEmit` — PASS (에러 없음)
