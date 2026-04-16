@@ -2,7 +2,7 @@
  * settings 객체를 한글 주석이 포함된 JSONC 문자열로 변환
  */
 
-const KEY_COMMENTS: Record<string, string> = {
+export const KEY_COMMENTS: Record<string, string> = {
   // Core
   model: "사용할 Claude 모델",
   effortLevel: "응답 품질 수준 (low/medium/high)",

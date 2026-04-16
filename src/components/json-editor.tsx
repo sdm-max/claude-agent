@@ -10,6 +10,8 @@ import { search, highlightSelectionMatches } from "@codemirror/search";
 import { bracketMatching } from "@codemirror/language";
 import { keymap } from "@codemirror/view";
 import { defaultKeymap, historyKeymap } from "@codemirror/commands";
+import { jsonHoverTooltip } from "@/lib/codemirror/json-hover-tooltip";
+import { jsonInlineHints } from "@/lib/codemirror/json-inline-hints";
 
 interface Props {
   value: string;
@@ -37,6 +39,8 @@ export default function JsonEditor({ value, onChange, readOnly = false }: Props)
         highlightSelectionMatches(),
         bracketMatching(),
         keymap.of([...defaultKeymap, ...historyKeymap]),
+        jsonHoverTooltip(),
+        jsonInlineHints(),
         oneDark,
         EditorView.theme({
           "&": { height: "100%", fontSize: "14px" },

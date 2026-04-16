@@ -12,6 +12,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { KEY_COMMENTS } from "@/lib/templates/annotate";
+import { detectDangerousDeny, removeDangerousDeny } from "@/lib/deny-warning";
+import { describePermission } from "@/lib/permission-descriptions";
+import { PERMISSION_PRESETS, getCategoryLabel, type PermissionPreset } from "@/lib/permission-presets";
 
 interface Props {
   settings: ClaudeSettings;
@@ -38,6 +42,7 @@ export default function SettingsForm({ settings, onChange, hideHooks }: Props) {
         <CardContent className="space-y-3">
           <div>
             <Label>Model</Label>
+            <FieldDesc keyName="model" />
             <Select
               value={settings.model || ""}
               onValueChange={(v) => update({ model: v || undefined })}
@@ -54,6 +59,7 @@ export default function SettingsForm({ settings, onChange, hideHooks }: Props) {
           </div>
           <div>
             <Label>System Prompt</Label>
+            <FieldDesc keyName="systemPrompt" />
             <Textarea
               className="mt-1"
               value={settings.systemPrompt || ""}
@@ -63,6 +69,7 @@ export default function SettingsForm({ settings, onChange, hideHooks }: Props) {
           </div>
           <div>
             <Label>Max Turns</Label>
+            <FieldDesc keyName="maxTurns" />
             <Input
               type="number"
               className="mt-1 w-32"
@@ -94,6 +101,7 @@ export default function SettingsForm({ settings, onChange, hideHooks }: Props) {
           </div>
           <div>
             <Label>Max Tokens</Label>
+            <FieldDesc keyName="maxTokens" />
             <Input
               type="number"
               className="mt-1 w-32"
@@ -105,6 +113,7 @@ export default function SettingsForm({ settings, onChange, hideHooks }: Props) {
           </div>
           <div>
             <Label>Temperature</Label>
+            <FieldDesc keyName="temperature" />
             <Input
               type="number"
               className="mt-1 w-32"
@@ -143,15 +152,39 @@ export default function SettingsForm({ settings, onChange, hideHooks }: Props) {
             label="Allow"
             value={settings.permissions?.allow || []}
             onChange={(allow) => update({ permissions: { ...settings.permissions, allow } })}
-            placeholder="e.g. Bash(git*), Read"
+            placeholder="직접 입력 또는 선택 버튼 클릭"
+            describer={describePermission}
+            presets={PERMISSION_PRESETS}
           />
+          <FieldDesc keyName="allow" />
           <Separator />
           <TagArrayField
             label="Deny"
             value={settings.permissions?.deny || []}
             onChange={(deny) => update({ permissions: { ...settings.permissions, deny } })}
-            placeholder="e.g. Bash(rm*)"
+            placeholder="직접 입력 또는 선택 버튼 클릭"
+            describer={describePermission}
+            presets={PERMISSION_PRESETS}
+            isDeny
           />
+          <FieldDesc keyName="deny" />
+          {(() => {
+            const allow = settings.permissions?.allow || [];
+            const deny = settings.permissions?.deny || [];
+            const conflicts = allow.filter((a) => deny.includes(a));
+            if (conflicts.length === 0) return null;
+            return (
+              <div className="mt-2 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
+                <p className="text-sm font-medium text-yellow-700">⚠ Allow / Deny 충돌</p>
+                <p className="text-xs text-yellow-600 mt-1">
+                  다음 항목이 Allow와 Deny 양쪽에 있습니다: <strong>{conflicts.join(", ")}</strong>
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Deny가 우선 적용되어 해당 권한은 차단됩니다.
+                </p>
+              </div>
+            );
+          })()}
         </CardContent>
       </Card>
 
@@ -159,6 +192,7 @@ export default function SettingsForm({ settings, onChange, hideHooks }: Props) {
       <Card size="sm">
         <CardHeader><CardTitle>Environment Variables</CardTitle></CardHeader>
         <CardContent>
+          <FieldDesc keyName="env" />
           <KeyValueEditor
             value={settings.env || {}}
             onChange={(env) => update({ env: Object.keys(env).length > 0 ? env : undefined })}
@@ -191,6 +225,7 @@ export default function SettingsForm({ settings, onChange, hideHooks }: Props) {
       <Card size="sm">
         <CardHeader><CardTitle>Sandbox</CardTitle></CardHeader>
         <CardContent className="space-y-3">
+          <FieldDesc keyName="sandbox" />
           <div className="flex items-center gap-3">
             <Label>Enabled</Label>
             <Switch
@@ -218,31 +253,130 @@ export default function SettingsForm({ settings, onChange, hideHooks }: Props) {
   );
 }
 
+function FieldDesc({ keyName }: { keyName: string }) {
+  const desc = (KEY_COMMENTS as Record<string, string>)[keyName];
+  if (!desc) return null;
+  return <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>;
+}
+
 // --- Sub-components ---
 
-function TagArrayField({ label, value, onChange, placeholder }: {
+function TagArrayField({ label, value, onChange, placeholder, describer, presets, isDeny }: {
   label: string; value: string[]; onChange: (v: string[]) => void; placeholder?: string;
+  describer?: (item: string) => string;
+  presets?: PermissionPreset[];
+  isDeny?: boolean;
 }) {
   const [input, setInput] = useState("");
+  const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const [showPresets, setShowPresets] = useState(false);
+  const existingSet = new Set(value);
+
   return (
     <div>
       <Label className="mb-1">{label}</Label>
       <div className="flex flex-wrap gap-1 mb-2">
         {value.map((item, i) => (
-          <Badge key={i} variant="secondary" className="gap-1">
+          <Badge
+            key={i}
+            variant={selectedTag === item ? "default" : "secondary"}
+            className={`gap-1 ${describer ? "cursor-pointer" : "cursor-default"}`}
+            onClick={() => { describer && setSelectedTag(selectedTag === item ? null : item); setShowPresets(false); }}
+          >
             {item}
-            <button onClick={() => onChange(value.filter((_, j) => j !== i))} className="text-muted-foreground hover:text-destructive ml-0.5">&times;</button>
+            <button onClick={(e) => { e.stopPropagation(); onChange(value.filter((_, j) => j !== i)); if (selectedTag === item) setSelectedTag(null); }} className="text-muted-foreground hover:text-destructive ml-0.5">&times;</button>
           </Badge>
         ))}
       </div>
-      <Input
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && input.trim()) { e.preventDefault(); onChange([...value, input.trim()]); setInput(""); }
-        }}
-        placeholder={placeholder || "Type and press Enter"}
-      />
+      {selectedTag && describer && (() => {
+        const preset = presets?.find((p) => p.pattern === selectedTag);
+        const hasWarning = isDeny ? preset?.warning : preset?.allowWarning;
+        return (
+          <div className={`mb-2 p-3 rounded-lg border ${hasWarning ? (isDeny ? "bg-destructive/5 border-destructive/20" : "bg-yellow-500/5 border-yellow-500/20") : "bg-muted/50 border-border"}`}>
+            <p className="text-sm font-medium">{selectedTag}</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {preset?.description || describer(selectedTag)}
+            </p>
+            {isDeny && preset?.warning && (
+              <p className="text-xs text-destructive/80 mt-1">⚠ {preset.warning}</p>
+            )}
+            {!isDeny && preset?.allowWarning && (
+              <p className="text-xs text-yellow-600 mt-1">💡 {preset.allowWarning}</p>
+            )}
+            <button
+              type="button"
+              className="mt-2 text-xs text-destructive underline hover:no-underline"
+              onClick={() => { onChange(value.filter((v) => v !== selectedTag)); setSelectedTag(null); }}
+            >
+              항목 제거
+            </button>
+          </div>
+        );
+      })()}
+      <div className="flex gap-2">
+        <Input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && input.trim()) { e.preventDefault(); onChange([...value, input.trim()]); setInput(""); }
+          }}
+          placeholder={placeholder || "직접 입력 후 Enter"}
+          className="flex-1"
+        />
+        {presets && (
+          <Button
+            type="button"
+            variant={showPresets ? "secondary" : "outline"}
+            size="sm"
+            onClick={() => { setShowPresets(!showPresets); setSelectedTag(null); }}
+          >
+            {showPresets ? "닫기" : "+ 선택"}
+          </Button>
+        )}
+      </div>
+      {showPresets && presets && (
+        <div className="mt-2 border border-border rounded-lg overflow-hidden">
+          {(["file", "command", "search", "web", "agent"] as const).map((cat) => {
+            const items = presets.filter((p) => p.category === cat);
+            if (items.length === 0) return null;
+            return (
+              <div key={cat}>
+                <div className="px-3 py-1.5 bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider border-b border-border">
+                  {getCategoryLabel(cat)}
+                </div>
+                {items.map((preset) => {
+                  const isAdded = existingSet.has(preset.pattern);
+                  return (
+                    <button
+                      key={preset.pattern}
+                      type="button"
+                      className={`w-full text-left px-3 py-2 border-b border-border last:border-b-0 transition-colors ${
+                        isAdded ? "bg-primary/5 opacity-60" : "hover:bg-accent"
+                      }`}
+                      disabled={isAdded}
+                      onClick={() => {
+                        if (!isAdded) onChange([...value, preset.pattern]);
+                      }}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-mono font-medium">{preset.pattern}</span>
+                        {isAdded && <span className="text-[10px] text-muted-foreground">등록됨</span>}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">{preset.description}</p>
+                      {isDeny && preset.warning && (
+                        <p className="text-xs text-destructive/80 mt-0.5">⚠ {preset.warning}</p>
+                      )}
+                      {!isDeny && preset.allowWarning && (
+                        <p className="text-xs text-yellow-600 mt-0.5">💡 {preset.allowWarning}</p>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
