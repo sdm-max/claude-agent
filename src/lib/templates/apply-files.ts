@@ -1,40 +1,42 @@
 import path from "path";
-import { getDb } from "@/lib/db";
-import { projects } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import os from "os";
 import { writeDiskWithSnapshot, type ResolvedPath } from "@/lib/disk-files";
 import type { TemplateFile } from "@/lib/templates";
 
-/**
- * Write template extraFiles (CLAUDE.md, etc.) directly to disk under the
- * given project path. Each file is snapshotted into file_versions before
- * being overwritten. Returns the list of relative paths that were written.
- */
-export function applyExtraFilesToProject(
-  projectPath: string,
+function resolveExtraFilePath(
+  basePath: string,
+  filePath: string,
+  projectId: string | null,
+): ResolvedPath {
+  if (filePath.startsWith("~/")) {
+    const rel = filePath.slice(2);
+    return {
+      absolutePath: path.join(os.homedir(), rel),
+      relativePath: filePath,
+      projectId: null,
+    };
+  }
+  return {
+    absolutePath: path.join(basePath, filePath),
+    relativePath: filePath,
+    projectId,
+  };
+}
+
+export function applyExtraFiles(
+  basePath: string,
   extraFiles: TemplateFile[],
+  projectId: string | null,
 ): string[] {
   if (!extraFiles || extraFiles.length === 0) return [];
 
-  const db = getDb();
-  const project = db
-    .select()
-    .from(projects)
-    .where(eq(projects.path, projectPath))
-    .get();
-
-  const projectId = project?.id ?? null;
   const written: string[] = [];
 
   for (const ef of extraFiles) {
-    if (!ef.path.endsWith(".md") || !ef.path.toLowerCase().includes("claude")) {
-      continue;
-    }
-    const target: ResolvedPath = {
-      absolutePath: path.join(projectPath, ef.path),
-      relativePath: ef.path,
-      projectId,
-    };
+    if (ef.path.includes("..")) continue;
+    if (path.isAbsolute(ef.path)) continue;
+
+    const target = resolveExtraFilePath(basePath, ef.path, projectId);
     writeDiskWithSnapshot(target, ef.content);
     written.push(ef.path);
   }

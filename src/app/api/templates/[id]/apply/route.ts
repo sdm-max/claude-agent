@@ -4,9 +4,10 @@ import { projects } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { getTemplateById } from "@/lib/templates";
 import { deepMergeSettings } from "@/lib/templates/merge";
-import { applyExtraFilesToProject } from "@/lib/templates/apply-files";
+import { applyExtraFiles } from "@/lib/templates/apply-files";
 import { resolveSettingsPath, readDisk, writeDiskWithSnapshot, type FileScope } from "@/lib/disk-files";
 import type { ClaudeSettings } from "@/lib/settings-schema";
+import os from "os";
 
 // POST /api/templates/[id]/apply
 // Body: { scope: "global" | "user" | "project" | "local", projectPath?: string, mode: "replace" | "merge" }
@@ -55,8 +56,9 @@ export async function POST(
   writeDiskWithSnapshot(target, configStr);
 
   let savedFiles: string[] = [];
-  if (projectPath && template.extraFiles) {
-    savedFiles = applyExtraFilesToProject(projectPath, template.extraFiles);
+  if (template.extraFiles) {
+    const basePath = projectPath || os.homedir();
+    savedFiles = applyExtraFiles(basePath, template.extraFiles, projectId);
   }
 
   return NextResponse.json({
