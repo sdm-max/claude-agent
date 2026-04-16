@@ -1357,3 +1357,145 @@ data: {"kind":"rules","relativePath":"CLAUDE.local.md","op":"unlink"}
 - [x] Overview 디스크 스캔이 새로 만든 CLAUDE.md 즉시 반영
 - [x] 모든 SSE 훅 (project events / home events) 구독 동작 (curl 로는 검증 못함, 컴포넌트 빌드 OK 로 갈음)
 - [x] 12 commits 분리 (Step 1~11 각 1, Step 12 작업내역 + 최종 1)
+
+---
+
+## 2026-04-16 회귀 감사 세션 — 발견 문제
+
+Phase 4 (시나리오 8 템플릿 apply) 회귀 검증 중 발견. 12-step 리팩터링 회귀 아님 — 기존 버그. **2026-04-16 수정 완료.**
+
+### 문제 1 — deepMergeSettings 스키마 필드 다수 누락
+
+**위치**: `src/lib/templates/merge.ts`
+
+**증상**: `mode="merge"` 로 템플릿 apply 시 overlay 의 아래 필드가 조용히 drop. 에러/경고 없음.
+
+**재현 (실측)**:
+1. `test-ref-agent/.claude/settings.json` 를 `{"model":"claude-sonnet-4-6"}` 로 리셋
+2. Templates → 보안 → `security-basic` + `security-ask-tier` 체크박스 → Scope=Project → test-ref-agent → Apply 2 templates
+3. 결과 디스크 내용:
+   ```json
+   {
+     "model": "claude-sonnet-4-6",
+     "permissions": {
+       "allow": [ ... 11개 ... ],
+       "deny":  [ ... 6개 ... ]
+     }
+   }
+   ```
+4. **`permissions.ask` 가 사라짐**. security-ask-tier 템플릿은 `ask: ["Bash(git push *)", "Bash(git reset *)", "Bash(rm *)", "Bash(npm install *)", "Bash(npx *)", "Write(*)", "WebFetch(*)"]` 7개를 정의하지만 merge 결과물엔 전부 drop.
+
+**증거 — merge.ts:10~22**:
+```ts
+if (overlay.permissions) {
+  result.permissions = result.permissions || {};
+  if (overlay.permissions.allow) { /* Set-union */ }
+  if (overlay.permissions.deny)  { /* Set-union */ }
+  // ask 처리 없음
+}
+```
+`permissions.ask` / `permissions.additionalDirectories` / `permissions.disableBypassPermissionsMode` / `permissions.disableAutoMode` 분기 부재.
+
+**증거 — 스키마 vs merge.ts 누락 필드 전체 (settings-schema.ts 대비)**:
+
+| 필드 | 스키마 위치 | 템플릿 사용 위치 |
+|---|---|---|
+| permissions.ask | schema:120 | templates/index.ts:104 (security-ask-tier) |
+| permissions.additionalDirectories | schema:122 | templates/index.ts:356 |
+| permissions.disableBypassPermissionsMode | schema:123 | templates/index.ts:179 |
+| permissions.disableAutoMode | schema:124 | templates/index.ts:180 |
+| effortLevel | schema:114 | templates/index.ts:1853, 1868, 1883, 2280, 2300 |
+| defaultMode | schema:115 | templates/index.ts:150 |
+| alwaysThinkingEnabled | schema:178 | templates/index.ts:1935, 2301 |
+| editorMode | schema:169 | templates/index.ts:2065 |
+| contextCompression | schema:179 | templates/index.ts:2137, 2281 |
+| autoUpdatesChannel | schema:196 | templates/index.ts:2151 |
+| cleanupPeriodDays | schema:195 | templates/index.ts:2265 |
+| additionalDirectories (top-level) | schema:175 | — |
+| autoMode | schema:166 | templates/index.ts:151 (security-auto-mode) |
+| worktree | schema:160 | templates/index.ts:2231 (config-worktree) |
+| attribution | schema:163 | templates/index.ts:2248 (config-attribution) |
+| modelOverrides | schema:183 | templates/index.ts:1898 (config-model-routing) |
+| availableModels | schema:182 | templates/index.ts:1917 (config-available-models) |
+| enableAllProjectMcpServers | schema:156 | 템플릿 미사용 |
+| trustProjectMcpServers | schema:157 | 템플릿 미사용 |
+| apiKey, workDir, showTurnDuration, terminalProgressBarEnabled, autoConnectIde, autoInstallIdeExtension, teammateMode | schema:170~189 | 템플릿 미사용 |
+
+**부분 처리 (중첩 손실)**:
+- `sandbox` — merge.ts:53~54 가 `result.sandbox = { ...result.sandbox, ...overlay.sandbox }` 얕은 머지. `sandbox.filesystem.allowWrite` 같은 내부 배열이 overlay 쪽 값으로 통째 대체됨 (union 되지 않음). `security-sandbox` 템플릿 (templates/index.ts:126) 영향.
+
+---
+
+### 문제 2 — applyExtraFilesToProject 파일 확장자 필터
+
+**위치**: `src/lib/templates/apply-files.ts:30`
+
+**코드**:
+```ts
+for (const ef of extraFiles) {
+  if (!ef.path.endsWith(".md") || !ef.path.toLowerCase().includes("claude")) {
+    continue;
+  }
+  // ... writeDiskWithSnapshot
+}
+```
+
+**증상**: `.md` 가 아니거나 경로에 `"claude"` 가 없는 extraFiles 는 skip — 디스크에 안 써짐.
+
+**영향 템플릿 (grep 확인)**:
+- `hooks-auto-lint` → `auto-lint.sh` extraFile. `.sh` 확장자라 첫 조건에서 skip. 훅 스크립트가 디스크에 생성 안 됨 → settings.json 의 PostToolUse 훅이 존재하지 않는 파일을 참조.
+- `hooks-git-check` 등 기타 hooks 카테고리의 `.sh` extraFiles 동일.
+
+**현재 통과하는 것**:
+- `CLAUDE.md` (`claudemd-*` 템플릿 전부) — `.md` + 경로 "claude" 포함
+- `.claude/skills/*.md` (`skill-*` 템플릿) — `.md` + 경로의 `.claude/` 에 "claude" 포함
+
+---
+
+## 2026-04-16 템플릿 apply 버그 수정
+
+### 수정 파일 (4개)
+
+| 파일 | 변경 | 관련 버그 |
+|---|---|---|
+| `src/lib/templates/merge.ts` | 전면 재작성: 27개 누락 필드 추가, sandbox deep merge, `!== undefined` 통일 | B1, B8 |
+| `src/lib/templates/apply-files.ts` | `.md`+`claude` 필터 제거, path traversal 보호, tilde(`~/`) 확장, 시그니처 일반화 `applyExtraFiles(basePath, files, projectId)` | B2, B3 |
+| `src/app/api/templates/[id]/apply/route.ts` | `applyExtraFiles` 호출로 전환, global/user scope시 `os.homedir()` basePath 사용 | B4 |
+| `src/app/api/templates/batch-apply/route.ts` | 동일 | B4 |
+
+### merge.ts 재작성 상세
+
+**전략 3가지**:
+- `union` — 배열: `Set` 합집합 (`permissions.allow/ask/deny`, `additionalDirectories`, `availableModels`, sandbox 내부 배열, worktree/autoMode 내부 배열)
+- `deep` — 중첩 객체: 재귀 머지 (`sandbox.filesystem`, `sandbox.network`, `worktree`, `autoMode`)
+- `overwrite` — 원시값: `!== undefined` 체크로 overlay 우선 (model, effortLevel, defaultMode 등 21개 스칼라 필드)
+
+**이전 → 이후**:
+- 처리 필드: 12개 → ClaudeSettings 전 필드 (83개)
+- truthiness 체크(`if (overlay.model)`) → `!== undefined` 통일 (falsy 값 `0`, `""`, `false` 정상 처리)
+- sandbox shallow merge(`{...base, ...overlay}`) → recursive deep merge (내부 배열 union)
+
+### apply-files.ts 수정 상세
+
+**이전**: `!ef.path.endsWith(".md") || !ef.path.toLowerCase().includes("claude")` → `.sh`/`.yml` 전부 skip
+**이후**: `..` path traversal 차단 + 절대경로 차단만. 확장자 제한 제거. `~/` prefix는 `os.homedir()` 으로 확장.
+**시그니처**: `applyExtraFilesToProject(projectPath, files)` → `applyExtraFiles(basePath, files, projectId)` — DB 조회 제거, caller가 projectId 전달.
+
+### 테스트 증거
+
+| # | 테스트 | 결과 |
+|---|---|---|
+| 1 | `npx tsc --noEmit` | PASS |
+| 2 | merge.ts 유닛 테스트 7개 (tsx) | ALL PASS |
+| 3 | apply-files.ts 유닛 테스트 6개 (.sh/.yml 기록, path traversal 차단, tilde 확장) | ALL PASS |
+| 4 | API: `security-ask-tier` 단일 apply → `permissions.ask` 7개 디스크 기록 | PASS |
+| 5 | API: `security-basic` + `security-ask-tier` batch apply → ask/allow/deny 전부 union | PASS |
+| 6 | API: `hooks-auto-lint` apply → `.claude/hooks/auto-lint.sh` 디스크 생성 | PASS |
+| 7 | API: `model-opus` apply → `effortLevel: "high"` 디스크 기록 | PASS |
+| 8 | API: `security-auto-mode` apply → `defaultMode` + `autoMode` 객체 디스크 기록 | PASS |
+| 9 | API: `config-worktree` + `config-attribution` batch → `worktree`/`attribution` 객체 기록 | PASS |
+| 10 | API: `security-sandbox` merge (base denyRead + overlay denyWrite) → 양쪽 보존 | PASS |
+| 11 | 회귀: `permissions.allow/deny` set-union 기존 동작 유지 | PASS |
+| 12 | 회귀: `hooks.PreToolUse` concat 기존 동작 유지 | PASS |
+| 13 | 회귀: `mcpServers` shallow merge 기존 동작 유지 | PASS |
+| 14 | 회귀: `CLAUDE.md` extraFile 기존 동작 유지 | PASS |
