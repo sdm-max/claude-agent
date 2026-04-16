@@ -9,6 +9,7 @@ interface VersionListItem {
   id: string;
   createdAt: number;
   relativePath: string;
+  preview?: string;
 }
 
 interface VersionDetail extends VersionListItem {
@@ -83,16 +84,21 @@ export default function VersionHistory({ projectId, relativePath, open, onClose,
           <div className="p-4 text-muted-foreground">No version history.</div>
         ) : (
           <div className="flex flex-col flex-1 overflow-hidden">
-            <div className="border-b border-border max-h-48 overflow-y-auto">
+            <div className="border-b border-border max-h-64 overflow-y-auto">
               {versions.map((v) => (
                 <button
                   key={v.id}
                   onClick={() => loadDetail(v)}
-                  className={`w-full text-left px-4 py-2 text-sm hover:bg-muted transition-colors ${
+                  className={`w-full text-left px-4 py-2 hover:bg-muted transition-colors border-b border-border/50 last:border-b-0 ${
                     selected?.id === v.id ? "bg-muted" : ""
                   }`}
                 >
-                  {new Date(v.createdAt).toLocaleString("ko-KR")}
+                  <div className="text-xs text-muted-foreground">
+                    {new Date(v.createdAt).toLocaleString("ko-KR")}
+                  </div>
+                  <div className="text-sm font-mono truncate mt-0.5">
+                    {v.preview || <span className="text-muted-foreground italic">(empty)</span>}
+                  </div>
                 </button>
               ))}
             </div>

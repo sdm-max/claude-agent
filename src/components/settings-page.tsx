@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import SettingsForm from "./settings-form";
 import JsonEditor from "./json-editor";
 import ScopeBadge from "./scope-badge";
+import VersionHistory from "./editors/VersionHistory";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import type { ClaudeSettings } from "@/lib/settings-schema";
@@ -22,8 +23,11 @@ export default function SettingsPage({ scope, title }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
 
   const hasChanges = rawContent !== savedContent;
+  const hasChangesRef = useRef(hasChanges);
+  useEffect(() => { hasChangesRef.current = hasChanges; }, [hasChanges]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -51,6 +55,21 @@ export default function SettingsPage({ scope, title }: Props) {
     if (hasChanges) return;
     void load();
   });
+
+  // Fallback for Chrome ERR_NETWORK_IO_SUSPENDED on backgrounded tabs.
+  useEffect(() => {
+    const refresh = () => {
+      if (hasChangesRef.current) return;
+      void load();
+    };
+    const onVis = () => { if (document.visibilityState === "visible") refresh(); };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [load]);
 
   useEffect(() => {
     try { setSettings(JSON.parse(rawContent)); setParseError(null); }
@@ -97,8 +116,20 @@ export default function SettingsPage({ scope, title }: Props) {
           <Button onClick={save} disabled={!hasChanges || saving}>
             {saving ? "Saving..." : "Save"}
           </Button>
+          <Button variant="outline" onClick={() => setShowHistory(true)}>
+            History
+          </Button>
         </div>
       </div>
+
+      <VersionHistory
+        projectId={null}
+        relativePath={scope === "global" ? "~/.claude/managed-settings.json" : "~/.claude/settings.json"}
+        open={showHistory}
+        onClose={() => setShowHistory(false)}
+        onRestore={(c) => setRawContent(c)}
+        language="json"
+      />
 
       <Tabs defaultValue="form" className="flex-1 flex flex-col overflow-hidden">
         <TabsList variant="line" className="px-4 border-b border-border">

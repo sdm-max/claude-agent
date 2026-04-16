@@ -25,6 +25,7 @@ export async function GET(request: NextRequest) {
       id: v.id,
       createdAt: v.createdAt,
       relativePath: v.relativePath,
+      preview: v.content.replace(/\s+/g, " ").trim().slice(0, 80),
     })),
   );
 }

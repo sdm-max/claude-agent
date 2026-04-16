@@ -37,7 +37,7 @@ export function useProjectEvents(
       }
     };
     es.onerror = () => {
-      // EventSource will auto-reconnect; nothing to do
+      // EventSource auto-reconnects when Chrome wakes the tab
     };
     return () => {
       es.close();

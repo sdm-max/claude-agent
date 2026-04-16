@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import CodeEditor from "./CodeEditor";
 import EditorToolbar from "./EditorToolbar";
+import VersionHistory from "./VersionHistory";
 import { useProjectEvents } from "@/hooks/use-project-events";
 import { Button } from "@/components/ui/button";
 import {
@@ -107,6 +108,7 @@ export default function FileDirectoryEditor({
 
   // Unsaved-changes guard when switching files
   const [pendingSelect, setPendingSelect] = useState<string | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
 
   const hasChanges = content !== savedContent;
   const hasChangesRef = useRef(hasChanges);
@@ -157,11 +159,16 @@ export default function FileDirectoryEditor({
     fetchFiles();
   }, [fetchFiles]);
 
-  // ── Auto-refresh on window focus (fallback if SSE dropped) ──────────────
+  // ── Auto-refresh on window focus / visibility (fallback if SSE dropped) ─
   useEffect(() => {
-    const onFocus = () => { void fetchFiles({ silent: true }); };
-    window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
+    const refresh = () => { void fetchFiles({ silent: true }); };
+    const onVis = () => { if (document.visibilityState === "visible") refresh(); };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", onVis);
+    };
   }, [fetchFiles]);
 
   // ── Real-time sync via SSE (fs-watcher push) ────────────────────────────
@@ -416,6 +423,11 @@ export default function FileDirectoryEditor({
             <EditorToolbar
               hasChanges={hasChanges}
               onSave={save}
+              onHistory={
+                files.find((f) => f.name === selectedName)?.pinned
+                  ? undefined
+                  : () => setShowHistory(true)
+              }
               saving={saving}
             />
             <div className="flex-1 overflow-hidden">
@@ -425,6 +437,14 @@ export default function FileDirectoryEditor({
                 language={editorLanguage}
               />
             </div>
+            <VersionHistory
+              projectId={projectId}
+              relativePath={`.claude/${type}/${selectedName}`}
+              open={showHistory}
+              onClose={() => setShowHistory(false)}
+              onRestore={(c) => setContent(c)}
+              language={editorLanguage === "shell" ? "markdown" : editorLanguage}
+            />
           </>
         ) : (
           <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">

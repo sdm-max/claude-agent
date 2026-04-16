@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { useProjectEvents } from "@/hooks/use-project-events";
 import CodeEditor from "@/components/editors/CodeEditor";
 import EditorToolbar from "@/components/editors/EditorToolbar";
 import AgentSettingsForm from "./AgentSettingsForm";
@@ -98,16 +99,49 @@ export default function AgentEditor({ projectId }: Props) {
   }, [frontmatter, body, syncToContent, activeTab]);
 
   // ── Fetch files ──
-  const fetchFiles = useCallback(async () => {
-    setLoading(true);
+  const hasChangesRef = useRef(hasChanges);
+  useEffect(() => { hasChangesRef.current = hasChanges; }, [hasChanges]);
+  const selectedNameRef = useRef(selectedName);
+  useEffect(() => { selectedNameRef.current = selectedName; }, [selectedName]);
+
+  const fetchFiles = useCallback(async (opts?: { silent?: boolean }) => {
+    const silent = opts?.silent ?? false;
+    if (!silent) setLoading(true);
     try {
       const res = await fetch(apiBase);
-      if (res.ok) setFiles(await res.json());
+      if (res.ok) {
+        const data: FileEntry[] = await res.json();
+        setFiles(data);
+        const currentSelected = selectedNameRef.current;
+        if (currentSelected && !data.some((f) => f.name === currentSelected)) {
+          if (!hasChangesRef.current) {
+            setSelectedName(null);
+            setContent("");
+            setSavedContent("");
+          }
+        }
+      }
     } catch { /* ignore */ }
-    finally { setLoading(false); }
+    finally { if (!silent) setLoading(false); }
   }, [apiBase]);
 
   useEffect(() => { fetchFiles(); }, [fetchFiles]);
+
+  // ── Real-time sync via SSE + focus/visibility fallback ──
+  useProjectEvents(projectId, (event) => {
+    if (event.kind === "agents") void fetchFiles({ silent: true });
+  });
+
+  useEffect(() => {
+    const refresh = () => { void fetchFiles({ silent: true }); };
+    const onVis = () => { if (document.visibilityState === "visible") refresh(); };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [fetchFiles]);
 
   // ── beforeunload ──
   useEffect(() => {

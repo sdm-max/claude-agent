@@ -1,12 +1,13 @@
 "use client";
 
-import { use, useState, useEffect, useCallback } from "react";
+import { use, useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import SettingsForm from "@/components/settings-form";
 import JsonEditor from "@/components/json-editor";
 import ScopeBadge from "@/components/scope-badge";
 import ClaudeMdEditor from "@/components/editors/ClaudeMdEditor";
 import FileDirectoryEditor from "@/components/editors/FileDirectoryEditor";
+import VersionHistory from "@/components/editors/VersionHistory";
 import HooksUnifiedEditor from "@/components/editors/HooksUnifiedEditor";
 import AgentEditor from "@/components/agents/AgentEditor";
 import { Button } from "@/components/ui/button";
@@ -41,9 +42,14 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [settingsError, setSettingsError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [showSettingsHistory, setShowSettingsHistory] = useState(false);
 
   const hasChanges = rawContent !== savedContent;
   const isMergedView = settingsScope === "merged";
+  const hasChangesRef = useRef(hasChanges);
+  useEffect(() => { hasChangesRef.current = hasChanges; }, [hasChanges]);
+  const settingsScopeRef = useRef(settingsScope);
+  useEffect(() => { settingsScopeRef.current = settingsScope; }, [settingsScope]);
 
   const loadProject = useCallback(async () => {
     try {
@@ -91,6 +97,22 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     if (hasChanges) return;
     void loadSettings(settingsScope);
   });
+
+  // Fallback for Chrome ERR_NETWORK_IO_SUSPENDED on backgrounded tabs.
+  useEffect(() => {
+    const refresh = () => {
+      if (hasChangesRef.current) return;
+      if (settingsScopeRef.current === "merged") return;
+      void loadSettings(settingsScopeRef.current);
+    };
+    const onVis = () => { if (document.visibilityState === "visible") refresh(); };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [loadSettings]);
 
   useEffect(() => {
     if (!hasChanges) return;
@@ -236,8 +258,22 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                   Copy to {settingsScope === "project" ? "Local" : "Project"}
                 </Button>
               )}
+              {!isMergedView && (
+                <Button variant="outline" onClick={() => setShowSettingsHistory(true)}>
+                  History
+                </Button>
+              )}
             </div>
           </div>
+
+          <VersionHistory
+            projectId={id}
+            relativePath={settingsScope === "local" ? ".claude/settings.local.json" : ".claude/settings.json"}
+            open={showSettingsHistory}
+            onClose={() => setShowSettingsHistory(false)}
+            onRestore={(c) => setRawContent(c)}
+            language="json"
+          />
 
           {settingsLoading ? (
             <div className="flex-1 flex items-center justify-center text-muted-foreground">Loading...</div>

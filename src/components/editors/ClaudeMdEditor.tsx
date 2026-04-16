@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import CodeEditor from "./CodeEditor";
 import EditorToolbar from "./EditorToolbar";
 import VersionHistory from "./VersionHistory";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useProjectEvents } from "@/hooks/use-project-events";
+import { useHomeEvents } from "@/hooks/use-home-events";
 
 const SCOPE_OPTIONS = ["user", "project", "local"] as const;
 type Scope = (typeof SCOPE_OPTIONS)[number];
@@ -28,6 +29,10 @@ export default function ClaudeMdEditor({ projectId, onHasChanges }: Props) {
   const [pendingScope, setPendingScope] = useState<Scope | null>(null);
 
   const hasChanges = content !== savedContent;
+  const hasChangesRef = useRef(hasChanges);
+  useEffect(() => { hasChangesRef.current = hasChanges; }, [hasChanges]);
+  const scopeRef = useRef(scope);
+  useEffect(() => { scopeRef.current = scope; }, [scope]);
 
   useEffect(() => { onHasChanges?.(hasChanges); }, [hasChanges, onHasChanges]);
 
@@ -58,9 +63,34 @@ export default function ClaudeMdEditor({ projectId, onHasChanges }: Props) {
 
   useProjectEvents(projectId, (event) => {
     if (event.kind !== "claudemd") return;
-    if (hasChanges) return;
-    void loadFile(scope);
+    if (scopeRef.current === "user") return;
+    if (hasChangesRef.current) return;
+    void loadFile(scopeRef.current);
   });
+
+  // User scope edits ~/.claude/CLAUDE.md which lives on the home bus
+  useHomeEvents((event) => {
+    if (event.kind !== "user-claudemd") return;
+    if (scopeRef.current !== "user") return;
+    if (hasChangesRef.current) return;
+    void loadFile("user");
+  });
+
+  // Fallback for Chrome ERR_NETWORK_IO_SUSPENDED on backgrounded tabs:
+  // re-sync on window focus / tab visibility restore.
+  useEffect(() => {
+    const refresh = () => {
+      if (hasChangesRef.current) return;
+      void loadFile(scopeRef.current);
+    };
+    const onVis = () => { if (document.visibilityState === "visible") refresh(); };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [loadFile]);
 
   const handleScopeChange = (newScope: Scope) => {
     if (hasChanges) { setPendingScope(newScope); } else { setScope(newScope); }
