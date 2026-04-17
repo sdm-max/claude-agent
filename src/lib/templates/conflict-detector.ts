@@ -9,10 +9,22 @@ export interface PermissionConflict {
   severity: "critical" | "warning";
 }
 
+export interface OrderDependencyConflict {
+  field: string;
+  values: { templateId: string; templateName: string; value: unknown }[];
+}
+
+export interface OrderDependencyReport {
+  conflicts: OrderDependencyConflict[];
+  summary: string;
+}
+
 export interface ConflictReport {
   conflicts: PermissionConflict[];
   hasCritical: boolean;
   summary: string;
+  orderDependencies?: OrderDependencyConflict[];
+  orderSummary?: string;
 }
 
 // ── Pattern parsing & matching ──
@@ -84,6 +96,65 @@ function getSeverity(denyPattern: string): "critical" | "warning" {
   // 와일드카드 전체 (Bash(*), Edit(*), Write(*), Read(*))
   if (d.arg && BROAD_PATTERNS.has(d.arg)) return "critical";
   return "warning";
+}
+
+// ── Order dependency detection ──
+
+const SCALAR_FIELDS_TO_CHECK = [
+  "model",
+  "effortLevel",
+  "defaultMode",
+  "systemPrompt",
+  "maxTurns",
+  "maxTokens",
+  "temperature",
+  "outputFormat",
+  "editorMode",
+  "teammateMode",
+  "autoUpdatesChannel",
+] as const;
+
+/**
+ * 여러 템플릿 조합 시 스칼라 필드가 서로 다른 값을 가지는지 감지.
+ * 적용 순서에 따라 결과가 달라짐 → 사용자 경고.
+ */
+export function detectOrderDependencies(
+  templates: { id: string; name: string; settings: ClaudeSettings }[],
+): OrderDependencyReport {
+  const fieldValues = new Map<
+    string,
+    { templateId: string; templateName: string; value: unknown }[]
+  >();
+
+  for (const tmpl of templates) {
+    for (const field of SCALAR_FIELDS_TO_CHECK) {
+      const val = (tmpl.settings as Record<string, unknown>)[field];
+      if (val === undefined) continue;
+      if (!fieldValues.has(field)) fieldValues.set(field, []);
+      fieldValues.get(field)!.push({
+        templateId: tmpl.id,
+        templateName: tmpl.name,
+        value: val,
+      });
+    }
+  }
+
+  const conflicts: OrderDependencyConflict[] = [];
+  for (const [field, values] of fieldValues.entries()) {
+    if (values.length < 2) continue;
+    const unique = new Set(values.map((v) => JSON.stringify(v.value)));
+    if (unique.size > 1) {
+      conflicts.push({ field, values });
+    }
+  }
+
+  let summary = "";
+  if (conflicts.length > 0) {
+    const first = conflicts[0];
+    summary = `${conflicts.length}건 순서 의존: "${first.field}" 가 ${first.values.length}개 카드에서 다른 값`;
+  }
+
+  return { conflicts, summary };
 }
 
 // ── Public API ──

@@ -4,7 +4,10 @@ import { projects } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { getTemplateById } from "@/lib/templates";
 import { deepMergeSettings } from "@/lib/templates/merge";
-import { detectInternalConflicts } from "@/lib/templates/conflict-detector";
+import {
+  detectInternalConflicts,
+  detectOrderDependencies,
+} from "@/lib/templates/conflict-detector";
 import { resolveSettingsPath, readDisk, type FileScope } from "@/lib/disk-files";
 import type { ClaudeSettings } from "@/lib/settings-schema";
 
@@ -59,5 +62,19 @@ export async function POST(request: NextRequest) {
   const merged = deepMergeSettings(current, incoming);
   const report = detectInternalConflicts(merged);
 
-  return NextResponse.json(report);
+  // Phase 2-4: 순서 의존 감지
+  const resolvedForOrder = templateIds
+    .map((id) => {
+      const t = getTemplateById(id);
+      return t ? { id: t.id, name: t.nameKo || t.name, settings: t.settings } : null;
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null);
+
+  const orderReport = detectOrderDependencies(resolvedForOrder);
+
+  return NextResponse.json({
+    ...report,
+    orderDependencies: orderReport.conflicts,
+    orderSummary: orderReport.summary,
+  });
 }

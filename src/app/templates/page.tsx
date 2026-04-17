@@ -234,8 +234,16 @@ export default function TemplatesPage() {
     const needsProject = applyScope === "project" || applyScope === "local";
     if (needsProject && !selectedProjectPath) return;
 
-    if (conflictReport?.hasCritical) {
-      const ok = confirm(`위험: ${conflictReport.summary}\n\n계속 적용하시겠습니까?`);
+    if (
+      conflictReport?.hasCritical ||
+      (conflictReport?.orderDependencies?.length ?? 0) > 0
+    ) {
+      const orderMsg = conflictReport?.orderSummary
+        ? `\n\n순서 의존: ${conflictReport.orderSummary}`
+        : "";
+      const ok = confirm(
+        `위험: ${conflictReport?.summary || ""}${orderMsg}\n\n계속 적용하시겠습니까?`,
+      );
       if (!ok) return;
     }
     setApplying(true);
@@ -501,6 +509,15 @@ export default function TemplatesPage() {
                   ⚠ 충돌 {conflictReport.conflicts.length}건
                 </Badge>
               )}
+              {conflictReport &&
+                (conflictReport.orderDependencies?.length ?? 0) > 0 && (
+                  <Badge
+                    variant="secondary"
+                    className="text-xs bg-yellow-500/20 text-yellow-700"
+                  >
+                    ⚠ 순서 의존 {conflictReport.orderDependencies!.length}건
+                  </Badge>
+                )}
               <Button variant="ghost" size="icon-xs" onClick={clearSelection}>
                 <X className="size-3" />
               </Button>
