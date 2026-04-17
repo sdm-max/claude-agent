@@ -6,9 +6,9 @@ import chokidar, { type FSWatcher } from "chokidar";
 
 // ── Kinds ───────────────────────────────────────────────────────────────
 // Project-scoped kinds (emitted on project bus via projectId).
-export type ProjectWatchKind = "rules" | "agents" | "hooks" | "settings" | "claudemd";
+export type ProjectWatchKind = "rules" | "agents" | "hooks" | "settings" | "claudemd" | "skills";
 // Home-scoped kinds (emitted on HOME_BUS_KEY bus, shared across all clients).
-export type HomeWatchKind = "user-settings" | "user-claudemd" | "user-hooks" | "user-rules" | "user-agents";
+export type HomeWatchKind = "user-settings" | "user-claudemd" | "user-hooks" | "user-rules" | "user-agents" | "user-skills";
 export type WatchKind = ProjectWatchKind | HomeWatchKind;
 
 export interface WatchEvent {
@@ -88,6 +88,7 @@ function classifyProjectPath(projectPath: string, filePath: string): ProjectWatc
   if (parts[1] === "rules" && parts[2]?.endsWith(".md")) return "rules";
   if (parts[1] === "agents" && parts[2]?.endsWith(".md")) return "agents";
   if (parts[1] === "hooks" && parts[2]?.endsWith(".sh")) return "hooks";
+  if (parts[1] === "skills" && parts.length >= 3) return "skills";
   if (parts.length === 2 && parts[1]?.startsWith("settings") && parts[1].endsWith(".json")) {
     return "settings";
   }
@@ -110,6 +111,7 @@ function classifyHomePath(filePath: string): HomeWatchKind | null {
   if (parts[0] === "hooks" && parts[1]?.endsWith(".sh")) return "user-hooks";
   if (parts[0] === "rules" && parts[1]?.endsWith(".md")) return "user-rules";
   if (parts[0] === "agents" && parts[1]?.endsWith(".md")) return "user-agents";
+  if (parts[0] === "skills" && parts.length >= 2) return "user-skills";
 
   return null;
 }
