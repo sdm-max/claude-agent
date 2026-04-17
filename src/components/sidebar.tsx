@@ -92,6 +92,13 @@ export default function Sidebar() {
 
       <Separator className="my-2" />
 
+      <SectionLabel>Workflows</SectionLabel>
+      <NavLink href="/workflows" active={pathname === "/workflows"}>
+        내 워크플로
+      </NavLink>
+
+      <Separator className="my-2" />
+
       <SectionLabel>Projects</SectionLabel>
       {projects.map((p) => (
         <NavLink
