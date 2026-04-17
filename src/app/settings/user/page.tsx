@@ -7,6 +7,7 @@ import ScopeBadge from "@/components/scope-badge";
 import VersionHistory from "@/components/editors/VersionHistory";
 import ClaudeMdEditor from "@/components/editors/ClaudeMdEditor";
 import FileDirectoryEditor from "@/components/editors/FileDirectoryEditor";
+import SkillEditor from "@/components/editors/SkillEditor";
 import HooksUnifiedEditor from "@/components/editors/HooksUnifiedEditor";
 import ConflictBanner from "@/components/settings/ConflictBanner";
 import AppliedTemplatesBar from "@/components/settings/AppliedTemplatesBar";
@@ -160,6 +161,7 @@ export default function UserSettingsPage() {
           <TabsTrigger value="claude-md">CLAUDE.md</TabsTrigger>
           <TabsTrigger value="rules">Rules</TabsTrigger>
           <TabsTrigger value="hooks">Hooks</TabsTrigger>
+          <TabsTrigger value="skills">Skills</TabsTrigger>
           <TabsTrigger value="agents">Agents</TabsTrigger>
         </TabsList>
 
@@ -281,6 +283,11 @@ export default function UserSettingsPage() {
               setSavedContent(json);
             }}
           />
+        </TabsContent>
+
+        {/* ── Skills Tab ── */}
+        <TabsContent value="skills" className="flex-1 overflow-hidden">
+          <SkillEditor projectId={null} />
         </TabsContent>
 
         {/* ── Agents Tab ── */}

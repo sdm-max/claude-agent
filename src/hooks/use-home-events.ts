@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 
-export type HomeEventKind = "user-settings" | "user-claudemd" | "user-hooks" | "user-rules" | "user-agents" | "ready";
+export type HomeEventKind = "user-settings" | "user-claudemd" | "user-hooks" | "user-rules" | "user-agents" | "user-skills" | "ready";
 
 export interface HomeEvent {
   kind: HomeEventKind;

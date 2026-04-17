@@ -10,6 +10,7 @@ import FileDirectoryEditor from "@/components/editors/FileDirectoryEditor";
 import VersionHistory from "@/components/editors/VersionHistory";
 import HooksUnifiedEditor from "@/components/editors/HooksUnifiedEditor";
 import AgentEditor from "@/components/agents/AgentEditor";
+import SkillEditor from "@/components/editors/SkillEditor";
 import ConflictBanner from "@/components/settings/ConflictBanner";
 import AppliedTemplatesBar from "@/components/settings/AppliedTemplatesBar";
 import SaveAsTemplateDialog from "@/components/settings/SaveAsTemplateDialog";
@@ -211,6 +212,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="settings">Settings</TabsTrigger>
           <TabsTrigger value="claude-md">CLAUDE.md</TabsTrigger>
+          <TabsTrigger value="skills">Skills</TabsTrigger>
           <TabsTrigger value="agents">Agents</TabsTrigger>
           <TabsTrigger value="rules">Rules</TabsTrigger>
           <TabsTrigger value="hooks">Hooks</TabsTrigger>
@@ -357,6 +359,10 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
         <TabsContent value="claude-md" className="flex-1 overflow-hidden">
           <ClaudeMdEditor projectId={id} />
+        </TabsContent>
+
+        <TabsContent value="skills" className="flex-1 overflow-hidden">
+          <SkillEditor projectId={id} />
         </TabsContent>
 
         <TabsContent value="agents" className="flex-1 overflow-hidden">

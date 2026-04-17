@@ -8,6 +8,7 @@ export type ProjectEventKind =
   | "hooks"
   | "settings"
   | "claudemd"
+  | "skills"
   | "ready";
 
 export interface ProjectEvent {
