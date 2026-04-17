@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import SettingsForm from "@/components/settings-form";
+import SettingsForm, { type PermissionsTrace } from "@/components/settings-form";
 import JsonEditor from "@/components/json-editor";
 import ScopeBadge from "@/components/scope-badge";
 import VersionHistory from "@/components/editors/VersionHistory";
@@ -28,6 +28,7 @@ export default function UserSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [editMode, setEditMode] = useState<"form" | "json">("form");
   const [showHistory, setShowHistory] = useState(false);
+  const [trace, setTrace] = useState<PermissionsTrace | null>(null);
 
   // For Hooks tab: homePath from /api/user/info
   const [homePath, setHomePath] = useState<string | null>(null);
@@ -71,11 +72,23 @@ export default function UserSettingsPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  // ── Load trace ──
+  const loadTrace = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/templates/applied/trace?scope=user`);
+      if (!res.ok) { setTrace(null); return; }
+      setTrace(await res.json());
+    } catch { setTrace(null); }
+  }, []);
+
+  useEffect(() => { loadTrace(); }, [loadTrace]);
+
   // ── SSE ──
   useHomeEvents((event) => {
     if (event.kind !== "user-settings") return;
     if (hasChangesRef.current) return;
     void load();
+    void loadTrace();
   });
 
   // ── Focus fallback ──
@@ -138,7 +151,7 @@ export default function UserSettingsPage() {
       </div>
 
       <Tabs defaultValue="settings" className="flex-1 flex flex-col overflow-hidden" onValueChange={(val) => {
-        if (val === "settings" || val === "hooks") void load();
+        if (val === "settings" || val === "hooks") { void load(); void loadTrace(); }
       }}>
         <TabsList variant="line" className="px-4 border-b border-border">
           <TabsTrigger value="settings">Settings</TabsTrigger>
@@ -151,7 +164,7 @@ export default function UserSettingsPage() {
         {/* ── Settings Tab ── */}
         <TabsContent value="settings" className="flex-1 flex flex-col overflow-hidden">
           <ConflictBanner settings={settings} />
-          <AppliedTemplatesBar scope="user" onUndo={load} />
+          <AppliedTemplatesBar scope="user" onUndo={() => { void load(); void loadTrace(); }} />
           <div className="flex items-center border-b border-border px-4 py-2 gap-2">
             {(["form", "json"] as const).map((m) => (
               <Button
@@ -187,6 +200,7 @@ export default function UserSettingsPage() {
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ scope: "user" }),
                 });
+                void loadTrace();
               } catch (e) { console.error("Failed to invalidate applied templates:", e); }
             }}
             language="json"
@@ -210,7 +224,7 @@ export default function UserSettingsPage() {
               </div>
             ) : (
               <div className="flex-1 overflow-hidden">
-                <SettingsForm settings={settings} onChange={handleFormChange} />
+                <SettingsForm settings={settings} onChange={handleFormChange} trace={trace} />
               </div>
             )
           ) : (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   Card,
@@ -103,6 +103,7 @@ export default function TemplatesPage() {
   const [applying, setApplying] = useState(false);
   const [applyResult, setApplyResult] = useState<string | null>(null);
   const [conflictReport, setConflictReport] = useState<ConflictReport | null>(null);
+  const [appliedMap, setAppliedMap] = useState<Record<string, string[]>>({});
 
   // Detail dialog
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -116,6 +117,14 @@ export default function TemplatesPage() {
   const [dialogApplying, setDialogApplying] = useState(false);
   const [dialogApplyResult, setDialogApplyResult] = useState<string | null>(
     null
+  );
+
+  // Phase 2-1: per-block exclusion state for Detail dialog Apply
+  const [detailExcludedKeys, setDetailExcludedKeys] = useState<Set<string>>(
+    new Set(),
+  );
+  const [detailExcludedFiles, setDetailExcludedFiles] = useState<Set<string>>(
+    new Set(),
   );
 
   useEffect(() => {
@@ -168,6 +177,43 @@ export default function TemplatesPage() {
     return () => ctrl.abort();
   }, [selected, applyScope, selectedProjectPath]);
 
+  const loadAppliedMap = useCallback(async (signal?: AbortSignal) => {
+    const needsProjectForApplied =
+      applyScope === "project" || applyScope === "local";
+    if (needsProjectForApplied && !selectedProjectPath) {
+      setAppliedMap({});
+      return;
+    }
+    try {
+      const params = new URLSearchParams({ scope: applyScope });
+      if (needsProjectForApplied) {
+        const proj = projects.find((p) => p.path === selectedProjectPath);
+        if (proj) params.set("projectId", proj.id);
+      }
+      const res = await fetch(`/api/templates/applied?${params.toString()}`, { signal });
+      if (!res.ok) {
+        setAppliedMap({});
+        return;
+      }
+      const rows = (await res.json()) as { templateId: string }[];
+      const next: Record<string, string[]> = {};
+      for (const row of rows) {
+        if (!next[row.templateId]) next[row.templateId] = [];
+        if (!next[row.templateId].includes(applyScope))
+          next[row.templateId].push(applyScope);
+      }
+      setAppliedMap(next);
+    } catch {
+      // ignore
+    }
+  }, [applyScope, selectedProjectPath, projects]);
+
+  useEffect(() => {
+    const ctrl = new AbortController();
+    loadAppliedMap(ctrl.signal);
+    return () => ctrl.abort();
+  }, [loadAppliedMap]);
+
   const toggleSelect = (id: string) => {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -211,6 +257,7 @@ export default function TemplatesPage() {
           ? `${applyScope} (${selectedProjectPath.split("/").pop()})`
           : applyScope;
         setApplyResult(`${data.applied} templates applied to ${target}`);
+        loadAppliedMap();
       } else {
         setApplyResult(`Error: ${data.error}`);
       }
@@ -225,6 +272,8 @@ export default function TemplatesPage() {
     setSelectedId(id);
     setDetailLoading(true);
     setDialogApplyResult(null);
+    setDetailExcludedKeys(new Set());
+    setDetailExcludedFiles(new Set());
     try {
       const res = await fetch(`/api/templates/${id}`);
       const data = await res.json();
@@ -249,6 +298,8 @@ export default function TemplatesPage() {
           scope: dialogScope,
           projectPath: needsProject ? dialogProjectPath : undefined,
           mode: "merge",
+          excludeTopLevelKeys: [...detailExcludedKeys],
+          excludeExtraFiles: [...detailExcludedFiles],
         }),
       });
       const data = await res.json();
@@ -257,6 +308,30 @@ export default function TemplatesPage() {
           ? `${dialogScope} (${dialogProjectPath.split("/").pop()})`
           : dialogScope;
         setDialogApplyResult(`Applied to ${target}`);
+        await loadAppliedMap();
+        if (dialogScope !== applyScope) {
+          try {
+            const params = new URLSearchParams({ scope: dialogScope });
+            if (dialogScope === "project" || dialogScope === "local") {
+              const proj = projects.find((p) => p.path === dialogProjectPath);
+              if (proj) params.set("projectId", proj.id);
+            }
+            const r = await fetch(`/api/templates/applied?${params.toString()}`);
+            if (r.ok) {
+              const rows = (await r.json()) as { templateId: string }[];
+              setAppliedMap((prev) => {
+                const next = { ...prev };
+                for (const row of rows) {
+                  if (!next[row.templateId]) next[row.templateId] = [];
+                  if (!next[row.templateId].includes(dialogScope)) {
+                    next[row.templateId].push(dialogScope);
+                  }
+                }
+                return next;
+              });
+            }
+          } catch { /* ignore */ }
+        }
       } else {
         setDialogApplyResult(`Error: ${data.error}`);
       }
@@ -324,6 +399,10 @@ export default function TemplatesPage() {
                         isSelected
                           ? "ring-2 ring-primary"
                           : "hover:ring-primary/30"
+                      } ${
+                        appliedMap[t.id] && appliedMap[t.id].length > 0
+                          ? "bg-green-500/5 border-green-500/30"
+                          : ""
                       }`}
                     >
                       <CardHeader>
@@ -373,6 +452,14 @@ export default function TemplatesPage() {
                         <Badge variant="outline" className="text-xs">
                           {t.scope}
                         </Badge>
+                        {appliedMap[t.id] && appliedMap[t.id].length > 0 && (
+                          <Badge
+                            variant="default"
+                            className="text-[10px] bg-green-600 hover:bg-green-700"
+                          >
+                            ✓ Applied
+                          </Badge>
+                        )}
                         <span
                           className={`text-xs ${
                             difficultyColors[t.difficulty]
@@ -504,9 +591,94 @@ export default function TemplatesPage() {
               </DialogHeader>
 
               <div className="space-y-4">
+                {/* Phase 2-1: per-block Apply checklist */}
+                {detail.settings &&
+                  Object.keys(detail.settings).length > 0 && (
+                    <div className="space-y-2">
+                      <h3 className="text-sm font-semibold">
+                        적용할 항목 선택
+                      </h3>
+                      <p className="text-xs text-muted-foreground">
+                        체크 해제한 항목은 Apply 시 머지에서 제외됩니다.
+                      </p>
+                      {Object.entries(
+                        detail.settings as Record<string, unknown>,
+                      ).map(([key, val]) => {
+                        const checked = !detailExcludedKeys.has(key);
+                        const preview = JSON.stringify(val, null, 2);
+                        return (
+                          <label
+                            key={key}
+                            className="flex items-start gap-2 p-2 border rounded cursor-pointer hover:bg-accent"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => {
+                                setDetailExcludedKeys((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(key)) next.delete(key);
+                                  else next.add(key);
+                                  return next;
+                                });
+                              }}
+                              className="mt-1"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm font-medium">{key}</div>
+                              <pre className="text-xs text-muted-foreground mt-0.5 truncate">
+                                {preview.length > 120
+                                  ? preview.slice(0, 120) + "..."
+                                  : preview}
+                              </pre>
+                            </div>
+                          </label>
+                        );
+                      })}
+                      {detail.extraFiles && detail.extraFiles.length > 0 && (
+                        <>
+                          <h4 className="text-xs font-semibold text-muted-foreground mt-3">
+                            Extra Files
+                          </h4>
+                          {detail.extraFiles.map((f) => {
+                            const checked = !detailExcludedFiles.has(f.path);
+                            return (
+                              <label
+                                key={f.path}
+                                className="flex items-center gap-2 p-2 border rounded cursor-pointer hover:bg-accent"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() => {
+                                    setDetailExcludedFiles((prev) => {
+                                      const next = new Set(prev);
+                                      if (next.has(f.path))
+                                        next.delete(f.path);
+                                      else next.add(f.path);
+                                      return next;
+                                    });
+                                  }}
+                                />
+                                <span className="text-sm font-mono">
+                                  {f.path}
+                                </span>
+                              </label>
+                            );
+                          })}
+                        </>
+                      )}
+                    </div>
+                  )}
+
                 {/* Settings JSON */}
                 {detail.settingsJson !== "{}" && (
                   <div>
+                    {detailExcludedKeys.size > 0 && (
+                      <p className="text-xs text-yellow-600 mb-2">
+                        ℹ 체크 해제된 항목({[...detailExcludedKeys].join(", ")})은 Apply 시 제외됩니다.
+                      </p>
+                    )}
                     <div className="flex items-center justify-between mb-2">
                       <h3 className="text-sm font-semibold">settings.json</h3>
                       <Button

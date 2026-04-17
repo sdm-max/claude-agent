@@ -13,17 +13,24 @@ import { Separator } from "@/components/ui/separator";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { KEY_COMMENTS } from "@/lib/templates/annotate";
-import { detectDangerousDeny, removeDangerousDeny } from "@/lib/deny-warning";
 import { describePermission } from "@/lib/permission-descriptions";
 import { PERMISSION_PRESETS, getCategoryLabel, type PermissionPreset } from "@/lib/permission-presets";
+
+export type PermissionSource = { templateId: string; templateName: string };
+export type PermissionsTrace = {
+  "permissions.allow"?: Record<string, PermissionSource[]>;
+  "permissions.ask"?: Record<string, PermissionSource[]>;
+  "permissions.deny"?: Record<string, PermissionSource[]>;
+};
 
 interface Props {
   settings: ClaudeSettings;
   onChange: (settings: ClaudeSettings) => void;
   hideHooks?: boolean;
+  trace?: PermissionsTrace | null;
 }
 
-export default function SettingsForm({ settings, onChange, hideHooks }: Props) {
+export default function SettingsForm({ settings, onChange, hideHooks, trace }: Props) {
   const update = (patch: Partial<ClaudeSettings>) => {
     const next = { ...settings, ...patch };
     for (const [k, v] of Object.entries(next)) {
@@ -155,8 +162,20 @@ export default function SettingsForm({ settings, onChange, hideHooks }: Props) {
             placeholder="직접 입력 또는 선택 버튼 클릭"
             describer={describePermission}
             presets={PERMISSION_PRESETS}
+            sourceMap={trace?.["permissions.allow"]}
           />
           <FieldDesc keyName="allow" />
+          <Separator />
+          <TagArrayField
+            label="Ask"
+            value={settings.permissions?.ask || []}
+            onChange={(ask) => update({ permissions: { ...settings.permissions, ask } })}
+            placeholder="직접 입력 또는 선택 버튼 클릭"
+            describer={describePermission}
+            presets={PERMISSION_PRESETS}
+            sourceMap={trace?.["permissions.ask"]}
+          />
+          <FieldDesc keyName="ask" />
           <Separator />
           <TagArrayField
             label="Deny"
@@ -166,6 +185,7 @@ export default function SettingsForm({ settings, onChange, hideHooks }: Props) {
             describer={describePermission}
             presets={PERMISSION_PRESETS}
             isDeny
+            sourceMap={trace?.["permissions.deny"]}
           />
           <FieldDesc keyName="deny" />
           {(() => {
@@ -261,11 +281,12 @@ function FieldDesc({ keyName }: { keyName: string }) {
 
 // --- Sub-components ---
 
-function TagArrayField({ label, value, onChange, placeholder, describer, presets, isDeny }: {
+function TagArrayField({ label, value, onChange, placeholder, describer, presets, isDeny, sourceMap }: {
   label: string; value: string[]; onChange: (v: string[]) => void; placeholder?: string;
   describer?: (item: string) => string;
   presets?: PermissionPreset[];
   isDeny?: boolean;
+  sourceMap?: Record<string, PermissionSource[]>;
 }) {
   const [input, setInput] = useState("");
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
@@ -274,23 +295,43 @@ function TagArrayField({ label, value, onChange, placeholder, describer, presets
 
   return (
     <div>
-      <Label className="mb-1">{label}</Label>
+      {label && <Label className="mb-1">{label}</Label>}
       <div className="flex flex-wrap gap-1 mb-2">
-        {value.map((item, i) => (
-          <Badge
-            key={i}
-            variant={selectedTag === item ? "default" : "secondary"}
-            className={`gap-1 ${describer ? "cursor-pointer" : "cursor-default"}`}
-            onClick={() => { describer && setSelectedTag(selectedTag === item ? null : item); setShowPresets(false); }}
-          >
-            {item}
-            <button onClick={(e) => { e.stopPropagation(); onChange(value.filter((_, j) => j !== i)); if (selectedTag === item) setSelectedTag(null); }} className="text-muted-foreground hover:text-destructive ml-0.5">&times;</button>
-          </Badge>
-        ))}
+        {value.map((item, i) => {
+          const sources = sourceMap?.[item];
+          const hasSource = sources && sources.length > 0;
+          const sourceTitle = hasSource
+            ? `출처: ${sources.map((s) => s.templateName).join(", ")}`
+            : undefined;
+          return (
+            <Badge
+              key={i}
+              variant={selectedTag === item ? "default" : "secondary"}
+              className={`gap-1 ${describer ? "cursor-pointer" : "cursor-default"}`}
+              onClick={() => { describer && setSelectedTag(selectedTag === item ? null : item); setShowPresets(false); }}
+            >
+              <span title={sourceTitle}>{item}</span>
+              {hasSource && (
+                <span
+                  className="text-[10px] font-normal opacity-70 ml-0.5 max-w-[120px] truncate"
+                  title={sourceTitle}
+                >
+                  · {sources![0].templateName}{sources!.length > 1 ? ` +${sources!.length - 1}` : ""}
+                </span>
+              )}
+              <button
+                onClick={(e) => { e.stopPropagation(); onChange(value.filter((_, j) => j !== i)); if (selectedTag === item) setSelectedTag(null); }}
+                title="제거"
+                className="text-muted-foreground hover:text-destructive ml-0.5"
+              >&times;</button>
+            </Badge>
+          );
+        })}
       </div>
       {selectedTag && describer && (() => {
         const preset = presets?.find((p) => p.pattern === selectedTag);
         const hasWarning = isDeny ? preset?.warning : preset?.allowWarning;
+        const sources = sourceMap?.[selectedTag];
         return (
           <div className={`mb-2 p-3 rounded-lg border ${hasWarning ? (isDeny ? "bg-destructive/5 border-destructive/20" : "bg-yellow-500/5 border-yellow-500/20") : "bg-muted/50 border-border"}`}>
             <p className="text-sm font-medium">{selectedTag}</p>
@@ -302,6 +343,11 @@ function TagArrayField({ label, value, onChange, placeholder, describer, presets
             )}
             {!isDeny && preset?.allowWarning && (
               <p className="text-xs text-yellow-600 mt-1">💡 {preset.allowWarning}</p>
+            )}
+            {sources && sources.length > 0 && (
+              <p className="text-xs text-muted-foreground mt-1">
+                출처 템플릿: <span className="font-medium">{sources.map((s) => s.templateName).join(", ")}</span>
+              </p>
             )}
             <button
               type="button"

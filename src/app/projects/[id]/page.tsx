@@ -2,7 +2,7 @@
 
 import { use, useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
-import SettingsForm from "@/components/settings-form";
+import SettingsForm, { type PermissionsTrace } from "@/components/settings-form";
 import JsonEditor from "@/components/json-editor";
 import ScopeBadge from "@/components/scope-badge";
 import ClaudeMdEditor from "@/components/editors/ClaudeMdEditor";
@@ -45,6 +45,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const [settingsError, setSettingsError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [showSettingsHistory, setShowSettingsHistory] = useState(false);
+  const [trace, setTrace] = useState<PermissionsTrace | null>(null);
 
   const hasChanges = rawContent !== savedContent;
   const isMergedView = settingsScope === "merged";
@@ -89,6 +90,20 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     } finally { setSettingsLoading(false); }
   }, [id]);
 
+  const loadTrace = useCallback(async (scope: SettingsScope) => {
+    if (scope === "merged") { setTrace(null); return; }
+    try {
+      const params = new URLSearchParams({ scope, projectId: id });
+      const res = await fetch(`/api/templates/applied/trace?${params}`);
+      if (!res.ok) { setTrace(null); return; }
+      setTrace(await res.json());
+    } catch {
+      setTrace(null);
+    }
+  }, [id]);
+
+  useEffect(() => { loadTrace(settingsScope); }, [settingsScope, loadTrace]);
+
   useEffect(() => {
     try { setSettings(JSON.parse(rawContent)); setParseError(null); }
     catch (e) { setParseError(e instanceof Error ? e.message : "Invalid JSON"); }
@@ -98,6 +113,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     if (event.kind !== "settings") return;
     if (hasChanges) return;
     void loadSettings(settingsScope);
+    void loadTrace(settingsScope);
   });
 
   // Fallback for Chrome ERR_NETWORK_IO_SUSPENDED on backgrounded tabs.
@@ -187,7 +203,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       </div>
 
       <Tabs defaultValue="overview" className="flex-1 flex flex-col overflow-hidden" onValueChange={(val) => {
-        if (val === "settings" || val === "hooks") loadSettings(settingsScope);
+        if (val === "settings" || val === "hooks") { loadSettings(settingsScope); loadTrace(settingsScope); }
       }}>
         <TabsList variant="line" className="px-4 border-b border-border">
           <TabsTrigger value="overview">Overview</TabsTrigger>
@@ -231,7 +247,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
             <AppliedTemplatesBar
               scope={settingsScope}
               projectId={id}
-              onUndo={() => loadSettings(settingsScope)}
+              onUndo={() => { loadSettings(settingsScope); loadTrace(settingsScope); }}
             />
           )}
           <div className="flex items-center border-b border-border px-4 py-2 gap-2">
@@ -289,6 +305,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ scope: settingsScope, projectId: id }),
                 });
+                loadTrace(settingsScope);
               } catch (e) { console.error("Failed to invalidate applied templates:", e); }
             }}
             language="json"
@@ -314,7 +331,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
               </div>
             ) : (
               <div className="flex-1 overflow-hidden">
-                <SettingsForm settings={settings} onChange={handleFormChange} hideHooks={!isMergedView} />
+                <SettingsForm settings={settings} onChange={handleFormChange} hideHooks={!isMergedView} trace={trace} />
               </div>
             )
           ) : (

@@ -26,6 +26,8 @@ export async function POST(
   const scope = body.scope as FileScope | undefined;
   const projectPath = body.projectPath as string | undefined;
   const mode = (body.mode ?? "merge") as "merge" | "replace";
+  const excludeKeys = (body.excludeTopLevelKeys as string[] | undefined) || [];
+  const excludeExtraFiles = (body.excludeExtraFiles as string[] | undefined) || [];
 
   if (!scope || !["global", "user", "project", "local"].includes(scope)) {
     return NextResponse.json({ error: "scope must be 'global', 'user', 'project', or 'local'" }, { status: 400 });
@@ -47,18 +49,30 @@ export async function POST(
 
   const target = resolveSettingsPath(scope, { projectPath, projectId });
   const existingRaw = readDisk(target.absolutePath);
+
+  // Phase 2-1: filter out excluded top-level keys from template.settings before merge
+  const filteredSettings: ClaudeSettings = { ...template.settings };
+  for (const key of excludeKeys) {
+    delete (filteredSettings as Record<string, unknown>)[key];
+  }
+
   let merged: ClaudeSettings;
   if (mode === "merge" && existingRaw) {
     try {
-      merged = deepMergeSettings(JSON.parse(existingRaw) as ClaudeSettings, template.settings);
+      merged = deepMergeSettings(JSON.parse(existingRaw) as ClaudeSettings, filteredSettings);
     } catch {
-      merged = template.settings;
+      merged = filteredSettings;
     }
   } else {
-    merged = template.settings;
+    merged = filteredSettings;
   }
 
   const configStr = JSON.stringify(merged, null, 2);
+
+  // Phase 2-1: filter extraFiles before applying/persisting
+  const filteredExtraFiles = (template.extraFiles || []).filter(
+    (f) => !excludeExtraFiles.includes(f.path),
+  );
 
   // M8: writeDisk + DB insert를 transaction으로 묶기 (DB 실패시 파일은 남지만 snapshot 존재, 재실행 안전)
   getDb().transaction(() => {
@@ -69,24 +83,24 @@ export async function POST(
       projectId,
       templateId: template.id,
       templateName: template.nameKo || template.name,
-      deltaJson: JSON.stringify(template.settings),
-      extraFiles: template.extraFiles ? JSON.stringify(template.extraFiles) : null,
+      deltaJson: JSON.stringify(filteredSettings),
+      extraFiles: filteredExtraFiles.length > 0 ? JSON.stringify(filteredExtraFiles) : null,
       appliedAt: Date.now(),
       isActive: 1,
     }).run();
   });
 
   let savedFiles: string[] = [];
-  if (template.extraFiles) {
+  if (filteredExtraFiles.length > 0) {
     const basePath = projectPath || os.homedir();
-    savedFiles = applyExtraFiles(basePath, template.extraFiles, projectId);
+    savedFiles = applyExtraFiles(basePath, filteredExtraFiles, projectId);
   }
 
   return NextResponse.json({
     success: true,
     scope,
     config: configStr,
-    extraFiles: template.extraFiles || [],
+    extraFiles: filteredExtraFiles,
     savedFiles,
   });
 }
