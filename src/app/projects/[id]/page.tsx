@@ -11,6 +11,7 @@ import VersionHistory from "@/components/editors/VersionHistory";
 import HooksUnifiedEditor from "@/components/editors/HooksUnifiedEditor";
 import AgentEditor from "@/components/agents/AgentEditor";
 import ConflictBanner from "@/components/settings/ConflictBanner";
+import AppliedTemplatesBar from "@/components/settings/AppliedTemplatesBar";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
@@ -226,6 +227,13 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
         <TabsContent value="settings" className="flex-1 flex flex-col overflow-hidden">
           <ConflictBanner settings={settings} />
+          {settingsScope !== "merged" && (
+            <AppliedTemplatesBar
+              scope={settingsScope}
+              projectId={id}
+              onUndo={() => loadSettings(settingsScope)}
+            />
+          )}
           <div className="flex items-center border-b border-border px-4 py-2 gap-2">
             {(["project", "local", "merged"] as const).map((s) => (
               <Button
@@ -273,7 +281,16 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
             relativePath={settingsScope === "local" ? ".claude/settings.local.json" : ".claude/settings.json"}
             open={showSettingsHistory}
             onClose={() => setShowSettingsHistory(false)}
-            onRestore={(c) => setRawContent(c)}
+            onRestore={async (c) => {
+              setRawContent(c);
+              try {
+                await fetch("/api/templates/applied/invalidate", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ scope: settingsScope, projectId: id }),
+                });
+              } catch (e) { console.error("Failed to invalidate applied templates:", e); }
+            }}
             language="json"
           />
 

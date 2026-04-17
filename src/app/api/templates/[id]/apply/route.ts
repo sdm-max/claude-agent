@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { nanoid } from "nanoid";
 import { getDb } from "@/lib/db";
-import { projects } from "@/lib/db/schema";
+import { projects, appliedTemplates } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { getTemplateById } from "@/lib/templates";
 import { deepMergeSettings } from "@/lib/templates/merge";
@@ -39,6 +40,11 @@ export async function POST(
     projectId = project?.id ?? null;
   }
 
+  // H1: scope가 project/local인데 projectId가 없으면 명확히 거부
+  if ((scope === "project" || scope === "local") && !projectId) {
+    return NextResponse.json({ error: "Project not found for the given path" }, { status: 404 });
+  }
+
   const target = resolveSettingsPath(scope, { projectPath, projectId });
   const existingRaw = readDisk(target.absolutePath);
   let merged: ClaudeSettings;
@@ -53,7 +59,22 @@ export async function POST(
   }
 
   const configStr = JSON.stringify(merged, null, 2);
-  writeDiskWithSnapshot(target, configStr);
+
+  // M8: writeDisk + DB insert를 transaction으로 묶기 (DB 실패시 파일은 남지만 snapshot 존재, 재실행 안전)
+  getDb().transaction(() => {
+    writeDiskWithSnapshot(target, configStr);
+    getDb().insert(appliedTemplates).values({
+      id: nanoid(),
+      scope,
+      projectId,
+      templateId: template.id,
+      templateName: template.nameKo || template.name,
+      deltaJson: JSON.stringify(template.settings),
+      extraFiles: template.extraFiles ? JSON.stringify(template.extraFiles) : null,
+      appliedAt: Date.now(),
+      isActive: 1,
+    }).run();
+  });
 
   let savedFiles: string[] = [];
   if (template.extraFiles) {

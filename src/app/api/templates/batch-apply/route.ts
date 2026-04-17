@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { nanoid } from "nanoid";
 import { getDb } from "@/lib/db";
-import { projects } from "@/lib/db/schema";
+import { projects, appliedTemplates } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { getTemplateById } from "@/lib/templates";
 import { deepMergeSettings } from "@/lib/templates/merge";
@@ -40,6 +41,11 @@ export async function POST(request: NextRequest) {
     projectId = project?.id ?? null;
   }
 
+  // H2: scope가 project/local인데 projectId가 없으면 명확히 거부
+  if ((scope === "project" || scope === "local") && !projectId) {
+    return NextResponse.json({ error: "Project not found for the given path" }, { status: 404 });
+  }
+
   const target = resolveSettingsPath(scope, { projectPath, projectId });
   const existingRaw = readDisk(target.absolutePath);
   let merged: ClaudeSettings = {};
@@ -48,6 +54,7 @@ export async function POST(request: NextRequest) {
   }
 
   const allExtraFiles: { path: string; content: string; description: string }[] = [];
+  // merged는 loop에서 누적
   for (const tmpl of resolvedTemplates) {
     if (!tmpl) continue;
     merged = deepMergeSettings(merged, tmpl.settings);
@@ -55,7 +62,25 @@ export async function POST(request: NextRequest) {
   }
 
   const configStr = JSON.stringify(merged, null, 2);
-  writeDiskWithSnapshot(target, configStr);
+
+  // M8: write + DB insert 전체를 transaction으로
+  getDb().transaction(() => {
+    writeDiskWithSnapshot(target, configStr);
+    for (const tmpl of resolvedTemplates) {
+      if (!tmpl) continue;
+      getDb().insert(appliedTemplates).values({
+        id: nanoid(),
+        scope,
+        projectId,
+        templateId: tmpl.id,
+        templateName: tmpl.nameKo || tmpl.name,
+        deltaJson: JSON.stringify(tmpl.settings),
+        extraFiles: tmpl.extraFiles ? JSON.stringify(tmpl.extraFiles) : null,
+        appliedAt: Date.now(),
+        isActive: 1,
+      }).run();
+    }
+  });
 
   let savedFiles: string[] = [];
   if (allExtraFiles.length > 0) {

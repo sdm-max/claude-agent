@@ -19,3 +19,15 @@ export const fileVersions = sqliteTable("file_versions", {
   content: text("content").notNull(),
   createdAt: integer("created_at", { mode: "number" }).notNull(),
 });
+
+export const appliedTemplates = sqliteTable("applied_templates", {
+  id: text("id").primaryKey(),
+  scope: text("scope").notNull(),                  // "global" | "user" | "project" | "local"
+  projectId: text("project_id").references(() => projects.id, { onDelete: "cascade" }),
+  templateId: text("template_id").notNull(),       // 예: "security-basic"
+  templateName: text("template_name").notNull(),   // 캐시된 nameKo
+  deltaJson: text("delta_json").notNull(),         // template.settings 원본 (머지 결과 아님)
+  extraFiles: text("extra_files"),                 // JSON array of TemplateFile[]
+  appliedAt: integer("applied_at", { mode: "number" }).notNull(),
+  isActive: integer("is_active", { mode: "number" }).notNull().default(1),  // 0 = undone
+});

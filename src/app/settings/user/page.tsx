@@ -9,6 +9,7 @@ import ClaudeMdEditor from "@/components/editors/ClaudeMdEditor";
 import FileDirectoryEditor from "@/components/editors/FileDirectoryEditor";
 import HooksUnifiedEditor from "@/components/editors/HooksUnifiedEditor";
 import ConflictBanner from "@/components/settings/ConflictBanner";
+import AppliedTemplatesBar from "@/components/settings/AppliedTemplatesBar";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import type { ClaudeSettings } from "@/lib/settings-schema";
@@ -150,6 +151,7 @@ export default function UserSettingsPage() {
         {/* ── Settings Tab ── */}
         <TabsContent value="settings" className="flex-1 flex flex-col overflow-hidden">
           <ConflictBanner settings={settings} />
+          <AppliedTemplatesBar scope="user" onUndo={load} />
           <div className="flex items-center border-b border-border px-4 py-2 gap-2">
             {(["form", "json"] as const).map((m) => (
               <Button
@@ -177,7 +179,16 @@ export default function UserSettingsPage() {
             relativePath="~/.claude/settings.json"
             open={showHistory}
             onClose={() => setShowHistory(false)}
-            onRestore={(c) => setRawContent(c)}
+            onRestore={async (c) => {
+              setRawContent(c);
+              try {
+                await fetch("/api/templates/applied/invalidate", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ scope: "user" }),
+                });
+              } catch (e) { console.error("Failed to invalidate applied templates:", e); }
+            }}
             language="json"
           />
 
