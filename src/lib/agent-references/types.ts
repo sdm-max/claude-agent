@@ -91,7 +91,28 @@ export const MODEL_SHORT_NAMES: Record<string, string> = {
   sonnet: "Sonnet",
   haiku: "Haiku",
   inherit: "Inherit",
-  "claude-opus-4-6": "Opus",
-  "claude-sonnet-4-6": "Sonnet",
-  "claude-haiku-4-5-20251001": "Haiku",
 };
+
+// Dynamic display name — parses claude-opus-X-Y / claude-sonnet-X-Y / claude-haiku-X-Y-DATE
+// Falls back to raw id if unrecognized.
+export function getModelDisplayName(modelId: string | undefined | null): string {
+  if (!modelId) return "";
+  const exact = MODEL_SHORT_NAMES[modelId];
+  if (exact) return exact;
+  const m = modelId.match(/^claude-(opus|sonnet|haiku)-(\d+)-(\d+)(?:-\w+)?$/);
+  if (m) {
+    const family = m[1].charAt(0).toUpperCase() + m[1].slice(1);
+    return `${family} ${m[2]}.${m[3]}`;
+  }
+  return modelId;
+}
+
+// Return full "Claude Family X.Y" for select labels.
+export function getModelFullLabel(modelId: string): string {
+  const m = modelId.match(/^claude-(opus|sonnet|haiku)-(\d+)-(\d+)(?:-\w+)?$/);
+  if (m) {
+    const family = m[1].charAt(0).toUpperCase() + m[1].slice(1);
+    return `Claude ${family} ${m[2]}.${m[3]}`;
+  }
+  return modelId;
+}

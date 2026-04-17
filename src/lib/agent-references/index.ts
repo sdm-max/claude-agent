@@ -6,7 +6,7 @@ import { devopsProfiles } from "./profiles/devops";
 import { orchestratorProfiles } from "./profiles/orchestrator";
 import type { GovernanceProfile, GovernanceCategory } from "./types";
 
-export { GOVERNANCE_CATEGORIES, RISK_LABELS, COST_LABELS, MODEL_SHORT_NAMES } from "./types";
+export { GOVERNANCE_CATEGORIES, RISK_LABELS, COST_LABELS, MODEL_SHORT_NAMES, getModelDisplayName, getModelFullLabel } from "./types";
 export type {
   GovernanceProfile,
   GovernanceCategory,

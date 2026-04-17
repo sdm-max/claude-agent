@@ -55,3 +55,30 @@ _대기_
 - 섹션별로 PASS/FAIL 표시
 - 모든 섹션 완료 후 이슈를 기획 단계로 묶어서 수정 계획 수립
 
+
+## 세션 2026-04-17 야간 — Test Project 대상 검증
+
+진행자: 사용자 직접 / 프로젝트: **Test Project** (별도 등록)
+
+### Part A: PASS
+### Part B: PASS
+### Part C-1 (Conflict Detection): PASS (개선 요청)
+- 이슈 C-1: 충돌 메시지에서 어떤 부분이 충돌인지 세부 표시 부족
+- 요청 C-2: 카드에 다중 기능 있을 때 각 기능별 체크리스트로 선택 적용
+- **FAIL C-3 (regression)**: 카드 Detail Dialog 에 다중 체크 풀기 기능 사라짐
+  * 조사 필요: templates/page.tsx 의 "Phase 2-1 per-block Apply checklist" 부분
+### Part C-2 (카드 간 충돌): PASS
+
+### Part D (Applied + Undo)
+- 이슈 D-1: 카드 체크박스 풀면 Apply Bar 하단 scope/project 선택이 사라짐 (UX 불편)
+- **FAIL D-2 (심각)**: 다중 체크 → 프로젝트 선택 → 보안카드 충돌 confirm → 적용 후
+  실제로 프로젝트 settings.json 에 설정이 남음 (Undo 불완전 또는 의도치 않은 적용)
+
+### Part E (Selective Apply + Trace)
+- **FAIL E-1**: 체크박스가 1개만 보임 (top-level 키가 1개인 카드만 테스트했는지 확인 필요)
+
+### Part F (Order Dependency Warning)
+- 경고는 정상 동작
+- 이슈 F-1: 표시되는 모델명 "Opus 4.6" 하드코딩 (4.7 나왔지만 업데이트 안 됨)
+  * 원인: MODEL_SHORT_NAMES 고정 매핑 + MODEL_OPTIONS 미갱신
+  * **수정됨 (이 커밋)**: getModelDisplayName fallback 함수 + 4.7 옵션 추가

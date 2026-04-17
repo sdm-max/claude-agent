@@ -221,9 +221,10 @@ export const HOOK_EVENTS = [
 export type HookEvent = (typeof HOOK_EVENTS)[number];
 
 export const MODEL_OPTIONS = [
-  { value: "claude-opus-4-6", label: "Claude Opus 4.6" },
-  { value: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
+  { value: "claude-opus-4-7", label: "Claude Opus 4.7 (latest)" },
+  { value: "claude-sonnet-4-6", label: "Claude Sonnet 4.6 (latest)" },
   { value: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5" },
+  { value: "claude-opus-4-6", label: "Claude Opus 4.6" },
 ] as const;
 
 export const EFFORT_LEVELS = [
