@@ -30,6 +30,7 @@ export const appliedTemplates = sqliteTable("applied_templates", {
   extraFiles: text("extra_files"),                 // JSON array of TemplateFile[]
   appliedAt: integer("applied_at", { mode: "number" }).notNull(),
   isActive: integer("is_active", { mode: "number" }).notNull().default(1),  // 0 = undone
+  workflowId: text("workflow_id"),                 // FK to workflows.id (NULL = standalone apply)
 });
 
 export const customTemplates = sqliteTable("custom_templates", {
@@ -44,6 +45,19 @@ export const customTemplates = sqliteTable("custom_templates", {
   tags: text("tags"),                             // JSON array
   settings: text("settings").notNull(),           // JSON ClaudeSettings
   extraFiles: text("extra_files"),                // JSON TemplateFile[]
+  createdAt: integer("created_at", { mode: "number" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "number" }).notNull(),
+});
+
+export const workflows = sqliteTable("workflows", {
+  id: text("id").primaryKey(),                    // "wf-xxxxxxxx"
+  name: text("name").notNull(),
+  nameKo: text("name_ko"),
+  description: text("description").default(""),
+  descriptionKo: text("description_ko").default(""),
+  scope: text("scope").notNull(),                 // "global"|"user"|"project"|"local"
+  projectId: text("project_id").references(() => projects.id, { onDelete: "cascade" }),
+  items: text("items").notNull(),                 // JSON [{templateId, excludeTopLevelKeys, excludeExtraFiles}]
   createdAt: integer("created_at", { mode: "number" }).notNull(),
   updatedAt: integer("updated_at", { mode: "number" }).notNull(),
 });
