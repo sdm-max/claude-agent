@@ -8,6 +8,7 @@ import AgentSettingsForm from "./AgentSettingsForm";
 import AgentHooksEditor from "./AgentHooksEditor";
 import AgentPreview from "./AgentPreview";
 import CreateAgentDialog from "./CreateAgentDialog";
+import AgentHeaderButton from "./AgentHeaderButton";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
@@ -249,6 +250,7 @@ export default function AgentEditor({ projectId }: Props) {
           <span className="text-sm font-medium">
             Agents <span className="ml-1 text-xs text-muted-foreground">({files.length})</span>
           </span>
+          <AgentHeaderButton projectId={projectId} onApplied={() => fetchFiles({ silent: true })} />
           <Button variant="outline" size="xs" onClick={() => setShowCreate(true)}>
             New
           </Button>
