@@ -1,4 +1,7 @@
 import type { ClaudeSettings } from "@/lib/settings-schema";
+import { getDb } from "@/lib/db";
+import { customTemplates } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 
 export interface Template {
   id: string;
@@ -32,7 +35,8 @@ export type TemplateCategory =
   | "model"
   | "env"
   | "ui"
-  | "optimization";
+  | "optimization"
+  | "custom";
 
 export const templates: Template[] = [
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -2339,7 +2343,54 @@ color: yellow
 ];
 
 export function getTemplateById(id: string): Template | undefined {
+  // 커스텀 템플릿은 prefix로 구분 → DB 조회
+  if (id.startsWith("custom-")) {
+    try {
+      const db = getDb();
+      const row = db.select().from(customTemplates).where(eq(customTemplates.id, id)).get();
+      if (!row) return undefined;
+      return customRowToTemplate(row);
+    } catch {
+      return undefined;
+    }
+  }
+  // 기존 하드코딩 검색
   return templates.find((t) => t.id === id);
+}
+
+function customRowToTemplate(row: typeof customTemplates.$inferSelect): Template {
+  return {
+    id: row.id,
+    name: row.name,
+    nameKo: row.nameKo || row.name,
+    description: row.description || "",
+    descriptionKo: row.descriptionKo || "",
+    category: row.category as TemplateCategory,
+    difficulty: (row.difficulty as 1 | 2 | 3) || 1,
+    scope: row.scope as "global" | "project" | "both",
+    tags: row.tags ? JSON.parse(row.tags) : [],
+    settings: JSON.parse(row.settings),
+    extraFiles: row.extraFiles ? JSON.parse(row.extraFiles) : undefined,
+  };
+}
+
+/**
+ * 하드코딩 템플릿 + 커스텀 템플릿 통합 목록 반환
+ */
+export function getAllTemplates(): (Template & { isCustom?: boolean })[] {
+  const hardcoded = templates.map((t) => ({ ...t, isCustom: false }));
+  let customRows: (typeof customTemplates.$inferSelect)[] = [];
+  try {
+    const db = getDb();
+    customRows = db.select().from(customTemplates).all();
+  } catch {
+    // DB 조회 실패 시 하드코딩만 반환
+  }
+  const customs = customRows.map((row) => ({
+    ...customRowToTemplate(row),
+    isCustom: true as const,
+  }));
+  return [...hardcoded, ...customs];
 }
 
 export function getTemplatesByCategory(category: TemplateCategory): Template[] {
@@ -2359,4 +2410,5 @@ export const categoryLabels: Record<TemplateCategory, { name: string; nameKo: st
   env: { name: "Environment", nameKo: "환경변수", icon: "Terminal" },
   ui: { name: "UI / UX", nameKo: "UI / UX", icon: "Monitor" },
   optimization: { name: "Config Optimizer", nameKo: "설정 최적화", icon: "Zap" },
+  custom: { name: "My Templates", nameKo: "내 템플릿", icon: "Star" },
 };

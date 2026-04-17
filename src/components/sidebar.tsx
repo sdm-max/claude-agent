@@ -19,6 +19,7 @@ import {
   Cpu,
   Terminal,
   Monitor,
+  Star,
 } from "lucide-react";
 
 interface Project {
@@ -40,6 +41,7 @@ const templateCategories = [
   { key: "env", nameKo: "환경변수", icon: Terminal },
   { key: "ui", nameKo: "UI / UX", icon: Monitor },
   { key: "optimization", nameKo: "최적화", icon: Zap },
+  { key: "custom", nameKo: "내 템플릿", icon: Star },
 ];
 
 export default function Sidebar() {

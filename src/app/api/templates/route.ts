@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { templates, categoryLabels } from "@/lib/templates";
+import { getAllTemplates, categoryLabels } from "@/lib/templates";
 
-// GET /api/templates?category=security|hooks|...
+// GET /api/templates?category=security|hooks|...|custom
 export async function GET(request: NextRequest) {
   const category = request.nextUrl.searchParams.get("category");
 
-  let filtered = templates;
-  if (category) {
-    filtered = templates.filter((t) => t.category === category);
-  }
+  const all = getAllTemplates();
+  const filtered = category ? all.filter((t) => t.category === category) : all;
 
   return NextResponse.json({
     templates: filtered.map((t) => ({
@@ -22,6 +20,7 @@ export async function GET(request: NextRequest) {
       scope: t.scope,
       tags: t.tags,
       hasExtraFiles: !!t.extraFiles?.length,
+      isCustom: t.isCustom ?? false,
     })),
     categories: categoryLabels,
   });
