@@ -147,17 +147,18 @@ export function registerWatcher(projectId: string, projectPathInput: string) {
 
   // Watch the project root directory (not individual files) so chokidar
   // keeps firing events across unlink/recreate cycles that `>` truncates
-  // produce. Depth 3 covers everything we care about:
-  //   <root>/CLAUDE.md                  (depth 1)
-  //   <root>/.claude/CLAUDE.md          (depth 2)
-  //   <root>/.claude/settings.json      (depth 2)
-  //   <root>/.claude/rules/foo.md       (depth 3)
-  //   <root>/.claude/agents/bar.md      (depth 3)
-  //   <root>/.claude/hooks/baz.sh       (depth 3)
+  // produce. Depth 4 covers everything we care about (including rules subdirectories):
+  //   <root>/CLAUDE.md                         (depth 1)
+  //   <root>/.claude/CLAUDE.md                 (depth 2)
+  //   <root>/.claude/settings.json             (depth 2)
+  //   <root>/.claude/rules/foo.md              (depth 3)
+  //   <root>/.claude/rules/frontend/foo.md     (depth 4)
+  //   <root>/.claude/agents/bar.md             (depth 3)
+  //   <root>/.claude/hooks/baz.sh              (depth 3)
   const watcher = chokidar.watch(projectPath, {
     ignoreInitial: true,
     persistent: true,
-    depth: 3,
+    depth: 4,
     ignored: (p: string) =>
       p.includes(`${path.sep}node_modules`) ||
       p.includes(`${path.sep}.git${path.sep}`) ||
@@ -213,7 +214,7 @@ function ensureHomeWatcherStarted() {
     const watcher = chokidar.watch(claudeDir, {
       ignoreInitial: true,
       persistent: true,
-      depth: 2,
+      depth: 3,
       ignored: (p: string) =>
         p.includes(`${path.sep}node_modules`) ||
         p.includes(`${path.sep}.git${path.sep}`),

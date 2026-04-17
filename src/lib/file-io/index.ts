@@ -88,25 +88,35 @@ export function fileExists(filePath: string): boolean {
   }
 }
 
-export function listDirectoryFiles(dirPath: string, extension?: string): { name: string; content: string }[] {
-  if (!fs.existsSync(dirPath)) {
-    return [];
-  }
-  try {
-    const entries = fs.readdirSync(dirPath, { withFileTypes: true });
-    const fileEntries = entries
-      .filter((e) => e.isFile())
-      .filter((e) => !extension || e.name.endsWith(extension))
-      .map((e) => e.name)
-      .sort();
-
-    return fileEntries.map((name) => ({
-      name,
-      content: readFileContent(path.join(dirPath, name)) ?? "",
-    }));
-  } catch {
-    return [];
-  }
+export function listDirectoryFiles(
+  dirPath: string,
+  extension?: string,
+  options?: { recursive?: boolean; maxDepth?: number },
+): { name: string; content: string }[] {
+  if (!fs.existsSync(dirPath)) return [];
+  const results: { name: string; content: string }[] = [];
+  const maxDepth = options?.maxDepth ?? (options?.recursive ? 3 : 0);
+  const walk = (currentPath: string, relativePath: string, depth: number) => {
+    try {
+      const entries = fs.readdirSync(currentPath, { withFileTypes: true });
+      for (const entry of entries) {
+        const entryRel = relativePath ? `${relativePath}/${entry.name}` : entry.name;
+        const entryAbs = path.join(currentPath, entry.name);
+        if (entry.isFile()) {
+          if (!extension || entry.name.endsWith(extension)) {
+            results.push({
+              name: entryRel,
+              content: readFileContent(entryAbs) ?? "",
+            });
+          }
+        } else if (entry.isDirectory() && options?.recursive && depth < maxDepth) {
+          walk(entryAbs, entryRel, depth + 1);
+        }
+      }
+    } catch { /* ignore */ }
+  };
+  walk(dirPath, "", 0);
+  return results.sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /** Resolve the disk path for a given file type + scope + project path */

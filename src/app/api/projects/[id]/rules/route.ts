@@ -48,7 +48,16 @@ function rulesDir(projectPath: string) {
 
 function isValidRegularName(name: string): boolean {
   const n = name.trim();
-  return n.length > 0 && n !== "." && n !== ".." && !n.includes("/") && !n.includes("..");
+  if (!n || !n.endsWith(EXTENSION)) return false;
+  if (n.startsWith("/")) return false;
+  if (n.includes("\\") || n.includes("\0")) return false;
+  if (n.includes("//")) return false;
+  const segments = n.split("/");
+  if (segments.length > 4) return false;
+  for (const seg of segments) {
+    if (!seg || seg === "." || seg === "..") return false;
+  }
+  return true;
 }
 
 async function resolveProject(id: string) {
@@ -86,7 +95,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
     });
   }
 
-  const rulesList = listDirectoryFiles(rulesDir(project.path), EXTENSION);
+  const rulesList = listDirectoryFiles(rulesDir(project.path), EXTENSION, { recursive: true });
 
   // Warn on filename collision between pinned and rules/
   for (const p of pinnedEntries) {

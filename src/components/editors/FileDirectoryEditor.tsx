@@ -40,14 +40,18 @@ function getTemplate(type: "agents" | "rules" | "hooks", fileName: string): stri
 `;
   }
   if (type === "rules") {
-    return `# ${fileName.replace(/\.md$/, "").replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
+    return `---
+# Optional: scope this rule to specific files (Claude Code paths frontmatter)
+# paths:
+#   - "src/**/*.ts"
+#   - "tests/**/*.test.ts"
+---
+
+# ${fileName.replace(/\.md$/, "").replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
 
 ## Rules
 
 1. [Rule description]
-   - Rationale: [Why this rule exists]
-
-2. [Rule description]
    - Rationale: [Why this rule exists]
 `;
   }

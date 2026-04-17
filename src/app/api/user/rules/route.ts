@@ -12,14 +12,21 @@ function rulesDir() {
 
 function isValidName(name: string): boolean {
   const n = name.trim();
-  return n.length > 0 && n !== "." && n !== ".."
-    && !n.includes("/") && !n.includes("\\") && !n.includes("\0") && !n.includes("..")
-    && n.endsWith(EXTENSION);
+  if (!n || !n.endsWith(EXTENSION)) return false;
+  if (n.startsWith("/")) return false;
+  if (n.includes("\\") || n.includes("\0")) return false;
+  if (n.includes("//")) return false;
+  const segments = n.split("/");
+  if (segments.length > 4) return false;
+  for (const seg of segments) {
+    if (!seg || seg === "." || seg === "..") return false;
+  }
+  return true;
 }
 
 // GET /api/user/rules — list all user-level rule files
 export async function GET() {
-  const files = listDirectoryFiles(rulesDir(), EXTENSION);
+  const files = listDirectoryFiles(rulesDir(), EXTENSION, { recursive: true });
   return NextResponse.json(files);
 }
 
