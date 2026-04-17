@@ -200,6 +200,41 @@ export const templates: Template[] = [
       },
     },
   },
+  {
+    id: "security-block-agents",
+    name: "Security Guard — Block Subagents",
+    nameKo: "서브에이전트 완전 차단",
+    description: "Block all subagent (Task) creation. Main Claude session remains fully functional.",
+    descriptionKo: "서브에이전트(Task 도구) 생성 완전 차단. Claude 본 세션은 정상 작동.",
+    category: "security",
+    difficulty: 1,
+    scope: "both",
+    tags: ["permissions.deny: Task/Agent", "서브에이전트 차단", "폭주 방지"],
+    settings: {
+      permissions: {
+        deny: ["Task", "Agent"],
+      },
+    },
+  },
+  {
+    id: "security-limit-tools",
+    name: "Security Guard — Limit Sensitive Paths",
+    nameKo: "민감 경로 차단",
+    description: "Selectively deny access to sensitive files (.env, secrets) without blocking all tools.",
+    descriptionKo: ".env 및 secrets 등 민감 파일 접근만 선택적으로 차단. 전체 도구 차단 아님.",
+    category: "security",
+    difficulty: 1,
+    scope: "project",
+    tags: ["permissions.deny: .env*", "secrets 차단", "선택적 제한"],
+    settings: {
+      permissions: {
+        deny: [
+          "Edit(.env)", "Edit(.env.*)", "Write(.env)", "Write(.env.*)",
+          "Read(.env.production)", "Read(./secrets/**)", "Edit(./secrets/**)",
+        ],
+      },
+    },
+  },
 
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   // 2. PERMISSIONS (세분화)
@@ -400,7 +435,7 @@ export const templates: Template[] = [
           matcher: "Bash",
           hooks: [{
             type: "command",
-            command: "echo $(cat) | jq -r '.tool_input.command' | grep -qE 'rm\\s+(-[a-zA-Z]*r|-[a-zA-Z]*r)' && echo 'rm -rf 사용 금지' >&2 && exit 2 || exit 0",
+            command: "cat | jq -r '.tool_input.command' | grep -qE 'rm\\s+(-[a-zA-Z]*r[a-zA-Z]*|--recursive)' && { echo 'rm -rf 사용 금지' >&2; exit 2; } || exit 0",
             timeout: 5,
           }],
         }],
@@ -433,7 +468,7 @@ export const templates: Template[] = [
       path: ".claude/hooks/auto-lint.sh",
       content: `#!/bin/bash
 set -euo pipefail
-FILE="\${TOOL_OUTPUT_FILE:-}"
+FILE=$(cat | jq -r '.tool_input.file_path // empty')
 if [ -z "$FILE" ]; then exit 0; fi
 EXT="\${FILE##*.}"
 case "$EXT" in
@@ -543,7 +578,7 @@ fi
           matcher: "",
           hooks: [{
             type: "command",
-            command: 'MSG=$(cat | jq -r \'.message // "Claude notification"\'); curl -s -X POST "${WEBHOOK_URL}" -H "Content-Type: application/json" -d "{\\\"text\\\": \\\"$MSG\\\"}" > /dev/null 2>&1 || true',
+            command: '[ -z "${WEBHOOK_URL:-}" ] && exit 0; MSG=$(cat | jq -r \'.message // "Claude notification"\'); curl -s -X POST "${WEBHOOK_URL}" -H "Content-Type: application/json" -d "{\\\"text\\\": \\\"$MSG\\\"}" > /dev/null 2>&1 || true',
             timeout: 10,
           }],
         }],
@@ -575,21 +610,21 @@ fi
   },
   {
     id: "hooks-subagent-control",
-    name: "Subagent Spawn Control",
-    nameKo: "서브에이전트 생성 제어",
-    description: "SubagentStart hook that limits and logs subagent spawning.",
-    descriptionKo: "서브에이전트 생성을 제한하고 로깅하는 SubagentStart 훅.",
+    name: "Subagent Spawn Observer",
+    nameKo: "서브에이전트 생성 관찰",
+    description: "SubagentStart hook that logs subagent spawning (observation only, cannot block).",
+    descriptionKo: "서브에이전트 생성을 로깅만 하는 SubagentStart 훅 (관찰 전용, 차단 불가). 차단은 security-block-agents 카드 사용.",
     category: "hooks",
     difficulty: 3,
     scope: "project",
-    tags: ["hooks.SubagentStart", "에이전트 수 제한", "로깅", "폭주 방지"],
+    tags: ["hooks.SubagentStart", "관찰 전용", "로깅", "차단 불가"],
     settings: {
       hooks: {
         SubagentStart: [{
           matcher: "",
           hooks: [{
             type: "command",
-            command: 'COUNT=$(pgrep -f "claude" | wc -l | tr -d " "); [ "$COUNT" -lt 20 ] || { echo \'{"block":true,"message":"Too many subagents (max 20)"}\' >&2; exit 2; }',
+            command: 'DATA=$(cat); echo "[$(date \"+%Y-%m-%d %H:%M:%S\")] SUBAGENT_START: $(echo \\"$DATA\\" | jq -r \'.agent_type // \\"unknown\\"\')" >> ~/.claude/subagent-log.txt',
             timeout: 5,
           }],
         }],

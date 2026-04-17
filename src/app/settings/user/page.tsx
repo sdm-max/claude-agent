@@ -8,6 +8,7 @@ import VersionHistory from "@/components/editors/VersionHistory";
 import ClaudeMdEditor from "@/components/editors/ClaudeMdEditor";
 import FileDirectoryEditor from "@/components/editors/FileDirectoryEditor";
 import HooksUnifiedEditor from "@/components/editors/HooksUnifiedEditor";
+import ConflictBanner from "@/components/settings/ConflictBanner";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import type { ClaudeSettings } from "@/lib/settings-schema";
@@ -148,6 +149,7 @@ export default function UserSettingsPage() {
 
         {/* ── Settings Tab ── */}
         <TabsContent value="settings" className="flex-1 flex flex-col overflow-hidden">
+          <ConflictBanner settings={settings} />
           <div className="flex items-center border-b border-border px-4 py-2 gap-2">
             {(["form", "json"] as const).map((m) => (
               <Button

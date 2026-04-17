@@ -27,6 +27,7 @@ import {
   Square,
   X,
 } from "lucide-react";
+import type { ConflictReport } from "@/lib/templates/conflict-detector";
 
 interface TemplateSummary {
   id: string;
@@ -101,6 +102,7 @@ export default function TemplatesPage() {
   const [selectedProjectPath, setSelectedProjectPath] = useState("");
   const [applying, setApplying] = useState(false);
   const [applyResult, setApplyResult] = useState<string | null>(null);
+  const [conflictReport, setConflictReport] = useState<ConflictReport | null>(null);
 
   // Detail dialog
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -139,6 +141,33 @@ export default function TemplatesPage() {
       .catch(() => {});
   }, []);
 
+  useEffect(() => {
+    if (selected.size === 0) {
+      setConflictReport(null);
+      return;
+    }
+    const needsProject = applyScope === "project" || applyScope === "local";
+    if (needsProject && !selectedProjectPath) {
+      setConflictReport(null);
+      return;
+    }
+    const ctrl = new AbortController();
+    fetch("/api/templates/preview-conflicts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        templateIds: [...selected],
+        scope: applyScope,
+        projectPath: needsProject ? selectedProjectPath : undefined,
+      }),
+      signal: ctrl.signal,
+    })
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => setConflictReport(data))
+      .catch(() => { /* aborted or network error — ignore */ });
+    return () => ctrl.abort();
+  }, [selected, applyScope, selectedProjectPath]);
+
   const toggleSelect = (id: string) => {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -159,6 +188,10 @@ export default function TemplatesPage() {
     const needsProject = applyScope === "project" || applyScope === "local";
     if (needsProject && !selectedProjectPath) return;
 
+    if (conflictReport?.hasCritical) {
+      const ok = confirm(`위험: ${conflictReport.summary}\n\n계속 적용하시겠습니까?`);
+      if (!ok) return;
+    }
     setApplying(true);
     setApplyResult(null);
     try {
@@ -376,6 +409,11 @@ export default function TemplatesPage() {
             {/* Selected count */}
             <div className="flex items-center gap-2">
               <Badge variant="default">{selected.size} selected</Badge>
+              {conflictReport && conflictReport.conflicts.length > 0 && (
+                <Badge variant={conflictReport.hasCritical ? "destructive" : "secondary"} className="text-xs">
+                  ⚠ 충돌 {conflictReport.conflicts.length}건
+                </Badge>
+              )}
               <Button variant="ghost" size="icon-xs" onClick={clearSelection}>
                 <X className="size-3" />
               </Button>

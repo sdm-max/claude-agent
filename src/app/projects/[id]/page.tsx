@@ -10,6 +10,7 @@ import FileDirectoryEditor from "@/components/editors/FileDirectoryEditor";
 import VersionHistory from "@/components/editors/VersionHistory";
 import HooksUnifiedEditor from "@/components/editors/HooksUnifiedEditor";
 import AgentEditor from "@/components/agents/AgentEditor";
+import ConflictBanner from "@/components/settings/ConflictBanner";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
@@ -224,6 +225,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         </TabsContent>
 
         <TabsContent value="settings" className="flex-1 flex flex-col overflow-hidden">
+          <ConflictBanner settings={settings} />
           <div className="flex items-center border-b border-border px-4 py-2 gap-2">
             {(["project", "local", "merged"] as const).map((s) => (
               <Button
