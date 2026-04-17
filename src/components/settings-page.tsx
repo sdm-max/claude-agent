@@ -7,6 +7,7 @@ import ScopeBadge from "./scope-badge";
 import VersionHistory from "./editors/VersionHistory";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import SaveAsTemplateDialog from "@/components/settings/SaveAsTemplateDialog";
 import type { ClaudeSettings } from "@/lib/settings-schema";
 import { useHomeEvents } from "@/hooks/use-home-events";
 
@@ -24,6 +25,7 @@ export default function SettingsPage({ scope, title }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [saveAsOpen, setSaveAsOpen] = useState(false);
 
   const hasChanges = rawContent !== savedContent;
   const hasChangesRef = useRef(hasChanges);
@@ -119,8 +121,18 @@ export default function SettingsPage({ scope, title }: Props) {
           <Button variant="outline" onClick={() => setShowHistory(true)}>
             History
           </Button>
+          <Button variant="outline" onClick={() => setSaveAsOpen(true)} disabled={!!parseError}>
+            Save as Card
+          </Button>
         </div>
       </div>
+
+      <SaveAsTemplateDialog
+        open={saveAsOpen}
+        onOpenChange={setSaveAsOpen}
+        currentSettings={settings}
+        defaultScope={scope}
+      />
 
       <VersionHistory
         projectId={null}

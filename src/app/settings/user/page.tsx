@@ -10,6 +10,7 @@ import FileDirectoryEditor from "@/components/editors/FileDirectoryEditor";
 import HooksUnifiedEditor from "@/components/editors/HooksUnifiedEditor";
 import ConflictBanner from "@/components/settings/ConflictBanner";
 import AppliedTemplatesBar from "@/components/settings/AppliedTemplatesBar";
+import SaveAsTemplateDialog from "@/components/settings/SaveAsTemplateDialog";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import type { ClaudeSettings } from "@/lib/settings-schema";
@@ -28,6 +29,7 @@ export default function UserSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [editMode, setEditMode] = useState<"form" | "json">("form");
   const [showHistory, setShowHistory] = useState(false);
+  const [saveAsOpen, setSaveAsOpen] = useState(false);
   const [trace, setTrace] = useState<PermissionsTrace | null>(null);
 
   // For Hooks tab: homePath from /api/user/info
@@ -184,8 +186,18 @@ export default function UserSettingsPage() {
               <Button variant="outline" onClick={() => setShowHistory(true)}>
                 History
               </Button>
+              <Button variant="outline" onClick={() => setSaveAsOpen(true)} disabled={!!parseError}>
+                Save as Card
+              </Button>
             </div>
           </div>
+
+          <SaveAsTemplateDialog
+            open={saveAsOpen}
+            onOpenChange={setSaveAsOpen}
+            currentSettings={settings}
+            defaultScope="user"
+          />
 
           <VersionHistory
             projectId={null}

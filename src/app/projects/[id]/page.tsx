@@ -12,6 +12,7 @@ import HooksUnifiedEditor from "@/components/editors/HooksUnifiedEditor";
 import AgentEditor from "@/components/agents/AgentEditor";
 import ConflictBanner from "@/components/settings/ConflictBanner";
 import AppliedTemplatesBar from "@/components/settings/AppliedTemplatesBar";
+import SaveAsTemplateDialog from "@/components/settings/SaveAsTemplateDialog";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
@@ -45,6 +46,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const [settingsError, setSettingsError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [showSettingsHistory, setShowSettingsHistory] = useState(false);
+  const [saveAsOpen, setSaveAsOpen] = useState(false);
   const [trace, setTrace] = useState<PermissionsTrace | null>(null);
 
   const hasChanges = rawContent !== savedContent;
@@ -289,8 +291,20 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                   History
                 </Button>
               )}
+              {!isMergedView && (
+                <Button variant="outline" onClick={() => setSaveAsOpen(true)} disabled={!!parseError}>
+                  Save as Card
+                </Button>
+              )}
             </div>
           </div>
+
+          <SaveAsTemplateDialog
+            open={saveAsOpen}
+            onOpenChange={setSaveAsOpen}
+            currentSettings={settings}
+            defaultScope={settingsScope === "merged" ? "project" : settingsScope}
+          />
 
           <VersionHistory
             projectId={id}
