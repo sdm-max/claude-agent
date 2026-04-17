@@ -169,7 +169,7 @@ export default function UserSettingsPage() {
         <TabsContent value="settings" className="flex-1 flex flex-col overflow-hidden">
           <ConflictBanner settings={settings} />
           <AppliedTemplatesBar scope="user" onUndo={() => { void load(); void loadTrace(); }} />
-          <div className="flex items-center border-b border-border px-4 py-2 gap-2">
+          <div className="flex flex-wrap items-center border-b border-border px-4 py-2 gap-2">
             {(["form", "json"] as const).map((m) => (
               <Button
                 key={m}

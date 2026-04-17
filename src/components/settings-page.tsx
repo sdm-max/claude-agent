@@ -108,7 +108,7 @@ export default function SettingsPage({ scope, title }: Props) {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between p-4 border-b border-border">
+      <div className="flex flex-wrap items-center justify-between gap-2 p-4 border-b border-border">
         <div className="flex items-center gap-3">
           <h1 className="text-xl font-bold">{title}</h1>
           <ScopeBadge scope={scope} />

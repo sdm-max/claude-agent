@@ -254,7 +254,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
               onUndo={() => { loadSettings(settingsScope); loadTrace(settingsScope); }}
             />
           )}
-          <div className="flex items-center border-b border-border px-4 py-2 gap-2">
+          <div className="flex flex-wrap items-center border-b border-border px-4 py-2 gap-2">
             {(["project", "local", "merged"] as const).map((s) => (
               <Button
                 key={s}
