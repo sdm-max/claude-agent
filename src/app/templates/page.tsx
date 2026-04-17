@@ -12,6 +12,8 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -26,6 +28,9 @@ import {
   CheckSquare,
   Square,
   X,
+  Pencil,
+  Trash2,
+  Plus,
 } from "lucide-react";
 import type { ConflictReport } from "@/lib/templates/conflict-detector";
 
@@ -40,6 +45,7 @@ interface TemplateSummary {
   scope: string;
   tags: string[];
   hasExtraFiles: boolean;
+  isCustom?: boolean;
 }
 
 interface TemplateDetail {
@@ -75,6 +81,30 @@ const SCOPES = [
   { value: "local", label: "Local (Project)" },
 ];
 
+const CUSTOM_SCOPES = [
+  { value: "global", label: "Global" },
+  { value: "user", label: "User" },
+  { value: "project", label: "Project" },
+  { value: "local", label: "Local" },
+  { value: "both", label: "Both" },
+];
+
+const CATEGORY_OPTIONS = [
+  "security",
+  "permissions",
+  "hooks",
+  "skills",
+  "mcp",
+  "claude-md",
+  "cicd",
+  "agents",
+  "model",
+  "env",
+  "ui",
+  "optimization",
+  "custom",
+];
+
 const difficultyLabels = ["", "Easy", "Medium", "Advanced"];
 const difficultyColors = [
   "",
@@ -82,6 +112,40 @@ const difficultyColors = [
   "text-yellow-400",
   "text-orange-400",
 ];
+
+interface CreateFormState {
+  name: string;
+  nameKo: string;
+  description: string;
+  descriptionKo: string;
+  category: string;
+  scope: string;
+  difficulty: number;
+  tagsInput: string;
+  settingsJson: string;
+  extraFilesJson: string;
+}
+
+const emptyCreateForm: CreateFormState = {
+  name: "",
+  nameKo: "",
+  description: "",
+  descriptionKo: "",
+  category: "custom",
+  scope: "project",
+  difficulty: 1,
+  tagsInput: "",
+  settingsJson: "{}",
+  extraFilesJson: "",
+};
+
+interface EditFormState {
+  name: string;
+  nameKo: string;
+  description: string;
+  descriptionKo: string;
+  category: string;
+}
 
 export default function TemplatesPage() {
   const searchParams = useSearchParams();
@@ -127,15 +191,41 @@ export default function TemplatesPage() {
     new Set(),
   );
 
-  useEffect(() => {
-    fetch("/api/templates")
-      .then((r) => r.json())
-      .then((data) => {
-        setTemplates(data.templates);
-        setCategories(data.categories);
-      })
-      .finally(() => setLoading(false));
+  // Phase 3-4: custom template create/edit/delete
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createForm, setCreateForm] =
+    useState<CreateFormState>(emptyCreateForm);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+
+  const [editOpen, setEditOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<TemplateSummary | null>(null);
+  const [editForm, setEditForm] = useState<EditFormState>({
+    name: "",
+    nameKo: "",
+    description: "",
+    descriptionKo: "",
+    category: "custom",
+  });
+  const [editError, setEditError] = useState<string | null>(null);
+  const [editSaving, setEditSaving] = useState(false);
+
+  const [deleteTarget, setDeleteTarget] = useState<TemplateSummary | null>(
+    null,
+  );
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const fetchTemplates = useCallback(async () => {
+    const res = await fetch("/api/templates");
+    const data = await res.json();
+    setTemplates(data.templates);
+    setCategories(data.categories);
   }, []);
+
+  useEffect(() => {
+    fetchTemplates().finally(() => setLoading(false));
+  }, [fetchTemplates]);
 
   useEffect(() => {
     fetch("/api/projects")
@@ -356,6 +446,180 @@ export default function TemplatesPage() {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  // Phase 3-4: open create dialog
+  const openCreate = () => {
+    setCreateForm(emptyCreateForm);
+    setCreateError(null);
+    setCreateOpen(true);
+  };
+
+  const submitCreate = async () => {
+    setCreateError(null);
+
+    const name = createForm.name.trim();
+    if (!name) {
+      setCreateError("name은 필수입니다 (1-100자).");
+      return;
+    }
+    if (name.length > 100) {
+      setCreateError("name은 100자 이내여야 합니다.");
+      return;
+    }
+    if (createForm.description.length > 500) {
+      setCreateError("description은 500자 이내여야 합니다.");
+      return;
+    }
+
+    let settings: unknown;
+    try {
+      const raw = createForm.settingsJson.trim();
+      settings = raw === "" ? {} : JSON.parse(raw);
+    } catch (e) {
+      setCreateError(
+        `settings JSON 파싱 실패: ${e instanceof Error ? e.message : String(e)}`,
+      );
+      return;
+    }
+    if (!settings || typeof settings !== "object" || Array.isArray(settings)) {
+      setCreateError("settings는 객체(JSON object)여야 합니다.");
+      return;
+    }
+
+    let extraFiles: unknown = undefined;
+    const extraRaw = createForm.extraFilesJson.trim();
+    if (extraRaw !== "") {
+      try {
+        extraFiles = JSON.parse(extraRaw);
+      } catch (e) {
+        setCreateError(
+          `extraFiles JSON 파싱 실패: ${
+            e instanceof Error ? e.message : String(e)
+          }`,
+        );
+        return;
+      }
+      if (!Array.isArray(extraFiles)) {
+        setCreateError("extraFiles는 배열이어야 합니다.");
+        return;
+      }
+    }
+
+    const tags = createForm.tagsInput
+      .split(",")
+      .map((t) => t.trim())
+      .filter((t) => t.length > 0);
+
+    setCreating(true);
+    try {
+      const res = await fetch("/api/custom-templates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          nameKo: createForm.nameKo.trim() || undefined,
+          description: createForm.description.trim() || undefined,
+          descriptionKo: createForm.descriptionKo.trim() || undefined,
+          category: createForm.category,
+          scope: createForm.scope,
+          difficulty: createForm.difficulty,
+          tags,
+          settings,
+          extraFiles,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setCreateError(data.error || "생성 실패");
+        return;
+      }
+      setCreateOpen(false);
+      await fetchTemplates();
+    } catch (e) {
+      setCreateError(e instanceof Error ? e.message : "네트워크 오류");
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  // Phase 3-4: open edit dialog
+  const openEdit = (t: TemplateSummary) => {
+    setEditTarget(t);
+    setEditForm({
+      name: t.name,
+      nameKo: t.nameKo,
+      description: t.description,
+      descriptionKo: t.descriptionKo,
+      category: t.category,
+    });
+    setEditError(null);
+    setEditOpen(true);
+  };
+
+  const submitEdit = async () => {
+    if (!editTarget) return;
+    setEditError(null);
+
+    const name = editForm.name.trim();
+    if (!name || name.length > 100) {
+      setEditError("name은 1-100자여야 합니다.");
+      return;
+    }
+    if (editForm.description.length > 500) {
+      setEditError("description은 500자 이내여야 합니다.");
+      return;
+    }
+
+    setEditSaving(true);
+    try {
+      const res = await fetch(`/api/custom-templates/${editTarget.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          nameKo: editForm.nameKo,
+          description: editForm.description,
+          descriptionKo: editForm.descriptionKo,
+          category: editForm.category,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setEditError(data.error || "수정 실패");
+        return;
+      }
+      setEditOpen(false);
+      setEditTarget(null);
+      await fetchTemplates();
+    } catch (e) {
+      setEditError(e instanceof Error ? e.message : "네트워크 오류");
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
+  // Phase 3-4: delete
+  const submitDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleteError(null);
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/custom-templates/${deleteTarget.id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setDeleteError(data.error || "삭제 실패");
+        return;
+      }
+      setDeleteTarget(null);
+      await fetchTemplates();
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : "네트워크 오류");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   // Group templates by category
   const grouped = templates.reduce<Record<string, TemplateSummary[]>>(
     (acc, t) => {
@@ -385,12 +649,24 @@ export default function TemplatesPage() {
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
       <div className="px-6 pt-6 pb-4 border-b border-border">
-        <h1 className="text-2xl font-bold">
-          {catInfo?.nameKo || "Templates"}
-        </h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          {items.length} templates. Select multiple to mix & apply to any scope.
-        </p>
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold">
+              {catInfo?.nameKo || "Templates"}
+            </h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              {items.length} templates. Select multiple to mix & apply to any scope.
+            </p>
+          </div>
+          <Button
+            size="sm"
+            onClick={openCreate}
+            className="shrink-0"
+          >
+            <Plus className="size-3.5" />
+            <span className="ml-1">새 카드</span>
+          </Button>
+        </div>
       </div>
 
       {/* Cards */}
@@ -439,6 +715,14 @@ export default function TemplatesPage() {
                               {t.descriptionKo}
                             </CardDescription>
                           </div>
+                          {t.isCustom && (
+                            <Badge
+                              variant="secondary"
+                              className="shrink-0 bg-yellow-500/20 text-yellow-700 text-[10px]"
+                            >
+                              커스텀
+                            </Badge>
+                          )}
                         </div>
                       </CardHeader>
                       <CardContent onClick={() => openDetail(t.id)}>
@@ -453,37 +737,66 @@ export default function TemplatesPage() {
                           ))}
                         </div>
                       </CardContent>
-                      <CardFooter
-                        className="gap-2"
-                        onClick={() => openDetail(t.id)}
-                      >
-                        <Badge variant="outline" className="text-xs">
-                          {t.scope}
-                        </Badge>
-                        {appliedMap[t.id] && appliedMap[t.id].length > 0 && (
-                          <Badge
-                            variant="default"
-                            className="text-[10px] bg-green-600 hover:bg-green-700"
-                          >
-                            ✓ Applied
-                          </Badge>
-                        )}
-                        <span
-                          className={`text-xs ${
-                            difficultyColors[t.difficulty]
-                          }`}
+                      <CardFooter className="gap-2">
+                        <div
+                          className="flex items-center gap-2 flex-1 min-w-0"
+                          onClick={() => openDetail(t.id)}
                         >
-                          {"★".repeat(t.difficulty)}
-                          {"☆".repeat(3 - t.difficulty)}{" "}
-                          {difficultyLabels[t.difficulty]}
-                        </span>
-                        {t.hasExtraFiles && (
-                          <Badge
-                            variant="secondary"
-                            className="text-xs ml-auto"
-                          >
-                            + files
+                          <Badge variant="outline" className="text-xs">
+                            {t.scope}
                           </Badge>
+                          {appliedMap[t.id] && appliedMap[t.id].length > 0 && (
+                            <Badge
+                              variant="default"
+                              className="text-[10px] bg-green-600 hover:bg-green-700"
+                            >
+                              ✓ Applied
+                            </Badge>
+                          )}
+                          <span
+                            className={`text-xs ${
+                              difficultyColors[t.difficulty]
+                            }`}
+                          >
+                            {"★".repeat(t.difficulty)}
+                            {"☆".repeat(3 - t.difficulty)}{" "}
+                            {difficultyLabels[t.difficulty]}
+                          </span>
+                          {t.hasExtraFiles && (
+                            <Badge
+                              variant="secondary"
+                              className="text-xs"
+                            >
+                              + files
+                            </Badge>
+                          )}
+                        </div>
+                        {t.isCustom && (
+                          <div className="flex items-center gap-1 ml-auto shrink-0">
+                            <Button
+                              variant="ghost"
+                              size="icon-xs"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openEdit(t);
+                              }}
+                              aria-label="편집"
+                            >
+                              <Pencil className="size-3" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon-xs"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeleteError(null);
+                                setDeleteTarget(t);
+                              }}
+                              aria-label="삭제"
+                            >
+                              <Trash2 className="size-3" />
+                            </Button>
+                          </div>
                         )}
                       </CardFooter>
                     </Card>
@@ -813,6 +1126,344 @@ export default function TemplatesPage() {
               </DialogFooter>
             </>
           ) : null}
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Custom Template Dialog */}
+      <Dialog
+        open={createOpen}
+        onOpenChange={(open) => {
+          setCreateOpen(open);
+          if (!open) setCreateError(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>새 커스텀 템플릿</DialogTitle>
+            <DialogDescription>
+              내 템플릿을 만들어 저장소에 등록합니다. settings JSON은 유효해야 합니다.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs font-medium">
+                name <span className="text-destructive">*</span>
+              </label>
+              <Input
+                value={createForm.name}
+                onChange={(e) =>
+                  setCreateForm({ ...createForm, name: e.target.value })
+                }
+                placeholder="my-custom-template"
+                maxLength={100}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium">nameKo</label>
+              <Input
+                value={createForm.nameKo}
+                onChange={(e) =>
+                  setCreateForm({ ...createForm, nameKo: e.target.value })
+                }
+                placeholder="내 커스텀 템플릿"
+                maxLength={100}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium">description</label>
+              <Textarea
+                value={createForm.description}
+                onChange={(e) =>
+                  setCreateForm({
+                    ...createForm,
+                    description: e.target.value,
+                  })
+                }
+                placeholder="What this template does..."
+                maxLength={500}
+                rows={2}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium">descriptionKo</label>
+              <Textarea
+                value={createForm.descriptionKo}
+                onChange={(e) =>
+                  setCreateForm({
+                    ...createForm,
+                    descriptionKo: e.target.value,
+                  })
+                }
+                placeholder="설명..."
+                maxLength={500}
+                rows={2}
+              />
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <label className="text-xs font-medium">category</label>
+                <select
+                  value={createForm.category}
+                  onChange={(e) =>
+                    setCreateForm({ ...createForm, category: e.target.value })
+                  }
+                  className="h-8 w-full rounded-lg border border-input bg-background px-2 text-sm"
+                >
+                  {CATEGORY_OPTIONS.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-medium">scope</label>
+                <select
+                  value={createForm.scope}
+                  onChange={(e) =>
+                    setCreateForm({ ...createForm, scope: e.target.value })
+                  }
+                  className="h-8 w-full rounded-lg border border-input bg-background px-2 text-sm"
+                >
+                  {CUSTOM_SCOPES.map((s) => (
+                    <option key={s.value} value={s.value}>
+                      {s.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-medium">difficulty</label>
+                <select
+                  value={createForm.difficulty}
+                  onChange={(e) =>
+                    setCreateForm({
+                      ...createForm,
+                      difficulty: Number(e.target.value),
+                    })
+                  }
+                  className="h-8 w-full rounded-lg border border-input bg-background px-2 text-sm"
+                >
+                  <option value={1}>1 - Easy</option>
+                  <option value={2}>2 - Medium</option>
+                  <option value={3}>3 - Advanced</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-medium">
+                tags (comma-separated)
+              </label>
+              <Input
+                value={createForm.tagsInput}
+                onChange={(e) =>
+                  setCreateForm({ ...createForm, tagsInput: e.target.value })
+                }
+                placeholder="tag1, tag2, tag3"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium">
+                settings (JSON) <span className="text-destructive">*</span>
+              </label>
+              <Textarea
+                value={createForm.settingsJson}
+                onChange={(e) =>
+                  setCreateForm({
+                    ...createForm,
+                    settingsJson: e.target.value,
+                  })
+                }
+                placeholder='{}'
+                rows={8}
+                className="font-mono text-xs"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium">
+                extraFiles (JSON array, optional)
+              </label>
+              <Textarea
+                value={createForm.extraFilesJson}
+                onChange={(e) =>
+                  setCreateForm({
+                    ...createForm,
+                    extraFilesJson: e.target.value,
+                  })
+                }
+                placeholder='[{"path":"CLAUDE.md","content":"...","description":"..."}]'
+                rows={4}
+                className="font-mono text-xs"
+              />
+            </div>
+
+            {createError && (
+              <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-2 text-xs text-destructive">
+                {createError}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setCreateOpen(false)}
+              disabled={creating}
+            >
+              Cancel
+            </Button>
+            <Button onClick={submitCreate} disabled={creating}>
+              {creating ? "생성 중..." : "Create"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Custom Template Dialog */}
+      <Dialog
+        open={editOpen}
+        onOpenChange={(open) => {
+          setEditOpen(open);
+          if (!open) {
+            setEditTarget(null);
+            setEditError(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>커스텀 템플릿 편집</DialogTitle>
+            <DialogDescription>
+              이름/설명/카테고리만 수정 가능합니다. settings 수정은 지원되지 않습니다.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs font-medium">
+                name <span className="text-destructive">*</span>
+              </label>
+              <Input
+                value={editForm.name}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, name: e.target.value })
+                }
+                maxLength={100}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium">nameKo</label>
+              <Input
+                value={editForm.nameKo}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, nameKo: e.target.value })
+                }
+                maxLength={100}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium">description</label>
+              <Textarea
+                value={editForm.description}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, description: e.target.value })
+                }
+                maxLength={500}
+                rows={2}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium">descriptionKo</label>
+              <Textarea
+                value={editForm.descriptionKo}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, descriptionKo: e.target.value })
+                }
+                maxLength={500}
+                rows={2}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium">category</label>
+              <select
+                value={editForm.category}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, category: e.target.value })
+                }
+                className="h-8 w-full rounded-lg border border-input bg-background px-2 text-sm"
+              >
+                {CATEGORY_OPTIONS.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {editError && (
+              <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-2 text-xs text-destructive">
+                {editError}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setEditOpen(false)}
+              disabled={editSaving}
+            >
+              Cancel
+            </Button>
+            <Button onClick={submitEdit} disabled={editSaving}>
+              {editSaving ? "저장 중..." : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirm Dialog */}
+      <Dialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeleteTarget(null);
+            setDeleteError(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>커스텀 템플릿 삭제</DialogTitle>
+            <DialogDescription>
+              <span className="font-medium">{deleteTarget?.nameKo}</span>
+              {" "}을(를) 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다. 기존에 적용된 Undo 내역은 유지됩니다.
+            </DialogDescription>
+          </DialogHeader>
+
+          {deleteError && (
+            <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-2 text-xs text-destructive">
+              {deleteError}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteTarget(null)}
+              disabled={deleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={submitDelete}
+              disabled={deleting}
+            >
+              {deleting ? "삭제 중..." : "Delete"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
