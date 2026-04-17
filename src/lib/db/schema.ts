@@ -31,3 +31,19 @@ export const appliedTemplates = sqliteTable("applied_templates", {
   appliedAt: integer("applied_at", { mode: "number" }).notNull(),
   isActive: integer("is_active", { mode: "number" }).notNull().default(1),  // 0 = undone
 });
+
+export const customTemplates = sqliteTable("custom_templates", {
+  id: text("id").primaryKey(),                    // "custom-xxxxxxxx"
+  name: text("name").notNull(),
+  nameKo: text("name_ko"),                        // optional; falls back to name
+  description: text("description").default(""),
+  descriptionKo: text("description_ko").default(""),
+  category: text("category").notNull(),           // TemplateCategory
+  difficulty: integer("difficulty").notNull().default(1),
+  scope: text("scope").notNull().default("project"),  // "global"|"user"|"project"|"local"|"both"
+  tags: text("tags"),                             // JSON array
+  settings: text("settings").notNull(),           // JSON ClaudeSettings
+  extraFiles: text("extra_files"),                // JSON TemplateFile[]
+  createdAt: integer("created_at", { mode: "number" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "number" }).notNull(),
+});
