@@ -48,6 +48,7 @@ export default function AppliedTemplatesBar({ scope, projectId, onUndo }: Props)
   }, [scope, projectId]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
   }, [load]);
 

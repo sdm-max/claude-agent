@@ -89,6 +89,7 @@ export default function WorkflowsPage() {
     finally { setLoading(false); }
   }, []);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void fetchWorkflows(); }, [fetchWorkflows]);
 
   useEffect(() => {
@@ -96,6 +97,8 @@ export default function WorkflowsPage() {
       setProjects(d);
       if (d.length > 0 && !createProjectId) setCreateProjectId(d[0].path);
     }).catch(() => {});
+    // `createProjectId` intentionally omitted — only set initial default on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const submitCreate = async () => {
@@ -197,7 +200,7 @@ export default function WorkflowsPage() {
           <div className="text-center text-muted-foreground py-12">Loading...</div>
         ) : workflows.length === 0 ? (
           <div className="text-center text-muted-foreground py-12">
-            워크플로가 없습니다. "+ 새 워크플로" 로 생성하세요.
+            워크플로가 없습니다. &quot;+ 새 워크플로&quot; 로 생성하세요.
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">

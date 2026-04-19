@@ -98,6 +98,7 @@ export default function SkillEditor({ projectId }: Props) {
     finally { if (!silent) setLoading(false); }
   }, [apiBase]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void fetchSkills(); }, [fetchSkills]);
 
   useProjectEvents(projectId ?? "", (event) => {

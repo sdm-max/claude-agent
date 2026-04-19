@@ -50,6 +50,7 @@ export default function SettingsPage({ scope, title }: Props) {
     } finally { setLoading(false); }
   }, [scope]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(); }, [load]);
 
   useHomeEvents((event) => {
@@ -74,6 +75,7 @@ export default function SettingsPage({ scope, title }: Props) {
   }, [load]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     try { setSettings(JSON.parse(rawContent)); setParseError(null); }
     catch (e) { setParseError(e instanceof Error ? e.message : "Invalid JSON"); }
   }, [rawContent]);

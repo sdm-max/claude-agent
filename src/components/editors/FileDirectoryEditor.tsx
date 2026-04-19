@@ -163,6 +163,7 @@ export default function FileDirectoryEditor({
   );
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchFiles();
   }, [fetchFiles]);
 

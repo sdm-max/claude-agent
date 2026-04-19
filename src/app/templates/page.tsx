@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { Suspense, useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   Card,
@@ -147,7 +147,7 @@ interface EditFormState {
   category: string;
 }
 
-export default function TemplatesPage() {
+function TemplatesPageInner() {
   const searchParams = useSearchParams();
   const activeCategory = searchParams.get("category") || "security";
 
@@ -161,7 +161,8 @@ export default function TemplatesPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   // Apply bar state
-  const [applyScope, setApplyScope] = useState("global");
+  // T-001.1: default "user" (안전) — projects 로드 후 "project"로 승격 (아래 useEffect)
+  const [applyScope, setApplyScope] = useState("user");
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjectPath, setSelectedProjectPath] = useState("");
   const [applying, setApplying] = useState(false);
@@ -176,7 +177,8 @@ export default function TemplatesPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // Detail dialog apply state
-  const [dialogScope, setDialogScope] = useState("global");
+  // T-001.1: default "user" (안전) — projects 로드 후 "project"로 승격
+  const [dialogScope, setDialogScope] = useState("user");
   const [dialogProjectPath, setDialogProjectPath] = useState("");
   const [dialogApplying, setDialogApplying] = useState(false);
   const [dialogApplyResult, setDialogApplyResult] = useState<string | null>(
@@ -224,6 +226,7 @@ export default function TemplatesPage() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchTemplates().finally(() => setLoading(false));
   }, [fetchTemplates]);
 
@@ -235,13 +238,20 @@ export default function TemplatesPage() {
         if (data.length > 0) {
           setSelectedProjectPath(data[0].path);
           setDialogProjectPath(data[0].path);
+          // T-001.1: projects 존재하면 scope를 "project"로 승격 (사용자 의도와 일치 목적).
+          // projects 비동기 로딩이므로 초기에는 "user", 이후 이 효과가 승격.
+          setApplyScope("project");
+          setDialogScope("project");
         }
       })
-      .catch(() => {});
+      .catch((err) => {
+        console.error("Failed to load projects:", err);
+      });
   }, []);
 
   useEffect(() => {
     if (selected.size === 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setConflictReport(null);
       return;
     }
@@ -300,6 +310,7 @@ export default function TemplatesPage() {
 
   useEffect(() => {
     const ctrl = new AbortController();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadAppliedMap(ctrl.signal);
     return () => ctrl.abort();
   }, [loadAppliedMap]);
@@ -322,7 +333,11 @@ export default function TemplatesPage() {
   const batchApply = async () => {
     if (selected.size === 0) return;
     const needsProject = applyScope === "project" || applyScope === "local";
-    if (needsProject && !selectedProjectPath) return;
+    if (needsProject && !selectedProjectPath) {
+      // T-001.2: silent early return 금지 — 사용자에게 원인 표시
+      setApplyResult("프로젝트를 먼저 선택하세요");
+      return;
+    }
 
     if (
       conflictReport?.hasCritical ||
@@ -357,10 +372,15 @@ export default function TemplatesPage() {
         setApplyResult(`${data.applied} templates applied to ${target}`);
         loadAppliedMap();
       } else {
-        setApplyResult(`Error: ${data.error}`);
+        // T-001.3: 상세 에러 메시지 + console
+        console.error("batchApply: server error", res.status, data);
+        setApplyResult(`Error ${res.status}: ${data?.error ?? "unknown"}`);
       }
-    } catch {
-      setApplyResult("Failed to apply");
+    } catch (err) {
+      // T-001.3: silent catch 제거 — console.error + message
+      console.error("batchApply: network/parse error", err);
+      const msg = err instanceof Error ? err.message : "network error";
+      setApplyResult(`Failed to apply: ${msg}`);
     } finally {
       setApplying(false);
     }
@@ -384,7 +404,11 @@ export default function TemplatesPage() {
   const dialogApply = async () => {
     if (!detail) return;
     const needsProject = dialogScope === "project" || dialogScope === "local";
-    if (needsProject && !dialogProjectPath) return;
+    if (needsProject && !dialogProjectPath) {
+      // T-001.2: silent early return 금지
+      setDialogApplyResult("프로젝트를 먼저 선택하세요");
+      return;
+    }
 
     setDialogApplying(true);
     setDialogApplyResult(null);
@@ -431,10 +455,15 @@ export default function TemplatesPage() {
           } catch { /* ignore */ }
         }
       } else {
-        setDialogApplyResult(`Error: ${data.error}`);
+        // T-001.3: 상세 에러 + console
+        console.error("dialogApply: server error", res.status, data);
+        setDialogApplyResult(`Error ${res.status}: ${data?.error ?? "unknown"}`);
       }
-    } catch {
-      setDialogApplyResult("Failed to apply");
+    } catch (err) {
+      // T-001.3: silent catch 제거
+      console.error("dialogApply: network/parse error", err);
+      const msg = err instanceof Error ? err.message : "network error";
+      setDialogApplyResult(`Failed to apply: ${msg}`);
     } finally {
       setDialogApplying(false);
     }
@@ -1467,5 +1496,13 @@ export default function TemplatesPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+export default function TemplatesPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <TemplatesPageInner />
+    </Suspense>
   );
 }

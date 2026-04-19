@@ -27,17 +27,17 @@ export const HOME_BUS_KEY = "__home__";
 
 // ── HMR-safe singletons via globalThis ──────────────────────────────────
 declare global {
-  // eslint-disable-next-line no-var
+   
   var __fsWatcherRegistry__: Map<string, WatcherRecord> | undefined;
-  // eslint-disable-next-line no-var
+   
   var __fsWatcherBus__: EventEmitter | undefined;
-  // eslint-disable-next-line no-var
+   
   var __fsWatcherDebounce__: Map<string, NodeJS.Timeout> | undefined;
-  // eslint-disable-next-line no-var
+   
   var __fsWatcherInitDone__: boolean | undefined;
-  // eslint-disable-next-line no-var
+   
   var __fsWatcherHomeStarted__: boolean | undefined;
-  // eslint-disable-next-line no-var
+   
   var __fsWatcherHome__: FSWatcher | undefined;
 }
 

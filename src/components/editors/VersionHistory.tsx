@@ -36,6 +36,7 @@ export default function VersionHistory({ projectId, relativePath, open, onClose,
 
   useEffect(() => {
     if (!open || !relativePath) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     fetch(listUrl)
       .then((r) => r.json())

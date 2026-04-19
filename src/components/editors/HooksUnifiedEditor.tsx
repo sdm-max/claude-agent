@@ -51,6 +51,7 @@ export default function HooksUnifiedEditor({
   const [saveResult, setSaveResult] = useState<string | null>(null);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSettings(initialSettings);
     setSavedSettings(initialSettings);
   }, [initialSettings]);

@@ -63,6 +63,7 @@ export default function ClaudeMdEditor({ projectId, fixedScope, onHasChanges }: 
     } finally { setLoading(false); }
   }, [projectId]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { loadFile(scope); }, [scope, loadFile]);
 
   useProjectEvents(projectId ?? "", (event) => {

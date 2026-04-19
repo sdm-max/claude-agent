@@ -20,6 +20,7 @@ export default function CodeEditor({ value, onChange, language = "markdown", rea
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const onChangeRef = useRef(onChange);
+  // eslint-disable-next-line react-hooks/refs
   onChangeRef.current = onChange;
 
   useEffect(() => {
@@ -58,7 +59,9 @@ export default function CodeEditor({ value, onChange, language = "markdown", rea
       view.destroy();
       viewRef.current = null;
     };
-    // Recreate editor when language or readOnly changes
+    // Recreate editor when language or readOnly changes. `value` intentionally omitted —
+    // initial value used on mount; subsequent changes synced via the effect below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [language, readOnly]);
 
   // Sync external value changes without recreating editor

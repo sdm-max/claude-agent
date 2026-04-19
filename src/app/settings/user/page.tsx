@@ -73,6 +73,7 @@ export default function UserSettingsPage() {
     } finally { setLoading(false); }
   }, []);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(); }, [load]);
 
   // ── Load trace ──
@@ -84,6 +85,7 @@ export default function UserSettingsPage() {
     } catch { setTrace(null); }
   }, []);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { loadTrace(); }, [loadTrace]);
 
   // ── SSE ──
@@ -111,6 +113,7 @@ export default function UserSettingsPage() {
 
   // ── Parse JSON ──
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     try { setSettings(JSON.parse(rawContent)); setParseError(null); }
     catch (e) { setParseError(e instanceof Error ? e.message : "Invalid JSON"); }
   }, [rawContent]);

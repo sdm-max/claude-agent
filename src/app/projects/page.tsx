@@ -49,9 +49,11 @@ export default function ProjectsPage() {
     setLoading(false);
   };
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { loadProjects(); }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!formPath.trim()) { setPathValidation(null); return; }
     const timeout = setTimeout(async () => {
       setValidating(true);

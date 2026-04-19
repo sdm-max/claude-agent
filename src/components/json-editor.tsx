@@ -23,6 +23,7 @@ export default function JsonEditor({ value, onChange, readOnly = false }: Props)
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const onChangeRef = useRef(onChange);
+  // eslint-disable-next-line react-hooks/refs
   onChangeRef.current = onChange;
 
   useEffect(() => {
@@ -68,6 +69,9 @@ export default function JsonEditor({ value, onChange, readOnly = false }: Props)
       view.destroy();
       viewRef.current = null;
     };
+    // `value` intentionally omitted — initial value used on mount; subsequent changes
+    // synced via the effect below without recreating the editor.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [readOnly]);
 
   // Sync external value changes

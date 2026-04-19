@@ -68,6 +68,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     }
   }, [id]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { loadProject(); }, [loadProject]);
 
   const loadSettings = useCallback(async (scope: SettingsScope) => {
@@ -105,9 +106,11 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     }
   }, [id]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { loadTrace(settingsScope); }, [settingsScope, loadTrace]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     try { setSettings(JSON.parse(rawContent)); setParseError(null); }
     catch (e) { setParseError(e instanceof Error ? e.message : "Invalid JSON"); }
   }, [rawContent]);

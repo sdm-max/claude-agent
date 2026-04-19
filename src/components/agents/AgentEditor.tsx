@@ -96,6 +96,7 @@ export default function AgentEditor({ projectId }: Props) {
   // When frontmatter or body changes from form, update content
   useEffect(() => {
     if (activeTab === "settings" || activeTab === "hooks") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       syncToContent();
     }
   }, [frontmatter, body, syncToContent, activeTab]);
@@ -127,6 +128,7 @@ export default function AgentEditor({ projectId }: Props) {
     finally { if (!silent) setLoading(false); }
   }, [apiBase]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchFiles(); }, [fetchFiles]);
 
   // ── Real-time sync via SSE + focus/visibility fallback ──
