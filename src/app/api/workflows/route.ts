@@ -3,23 +3,12 @@ import { nanoid } from "nanoid";
 import { getDb } from "@/lib/db";
 import { workflows } from "@/lib/db/schema";
 import { eq, and, desc, isNull } from "drizzle-orm";
+import { isValidItem, type WorkflowItem } from "@/lib/workflows/validate";
+
+// Temporary re-export shim — keeps `../route` import in [id]/route.ts working until D-3b migrates it.
+export { isValidItem, type WorkflowItem };
 
 const VALID_SCOPES = ["global", "user", "project", "local"];
-
-export interface WorkflowItem {
-  templateId: string;
-  excludeTopLevelKeys?: string[];
-  excludeExtraFiles?: string[];
-}
-
-export function isValidItem(x: unknown): x is WorkflowItem {
-  if (!x || typeof x !== "object") return false;
-  const o = x as Record<string, unknown>;
-  if (typeof o.templateId !== "string" || o.templateId.length === 0) return false;
-  if (o.excludeTopLevelKeys !== undefined && !Array.isArray(o.excludeTopLevelKeys)) return false;
-  if (o.excludeExtraFiles !== undefined && !Array.isArray(o.excludeExtraFiles)) return false;
-  return true;
-}
 
 // GET /api/workflows?scope=X&projectId=Y
 export async function GET(req: NextRequest) {
