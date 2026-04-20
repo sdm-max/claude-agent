@@ -13,16 +13,40 @@ function validateExtraFilePath(path: string): boolean {
   return true;
 }
 
-// prototype pollution 방지
+// prototype pollution 방지 — own-key walker (T-F2.7)
+const FORBIDDEN_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+const MAX_SANITIZE_DEPTH = 32;
+
+function containsForbiddenKey(value: unknown, depth: number): boolean {
+  if (depth > MAX_SANITIZE_DEPTH) {
+    throw new Error("depth_exceeded");
+  }
+  if (!value || typeof value !== "object") return false;
+  // Arrays: recurse into elements but don't treat indices as keys
+  if (Array.isArray(value)) {
+    for (const el of value) {
+      if (containsForbiddenKey(el, depth + 1)) return true;
+    }
+    return false;
+  }
+  // Plain object: check own keys + recurse into values
+  const obj = value as Record<string, unknown>;
+  for (const k of Object.keys(obj)) {
+    if (FORBIDDEN_KEYS.has(k)) return true;
+    if (containsForbiddenKey(obj[k], depth + 1)) return true;
+  }
+  return false;
+}
+
 function sanitizeSettings(obj: unknown): ClaudeSettings {
   if (!obj || typeof obj !== "object" || Array.isArray(obj)) {
     throw new Error("settings must be an object");
   }
-  const json = JSON.stringify(obj);
-  if (json.includes('"__proto__"') || json.includes('"constructor"') || json.includes('"prototype"')) {
+  if (containsForbiddenKey(obj, 0)) {
     throw new Error("settings contains forbidden keys");
   }
-  return JSON.parse(json) as ClaudeSettings;
+  // Round-trip via JSON to strip functions/symbols (parity with prior behavior)
+  return JSON.parse(JSON.stringify(obj)) as ClaudeSettings;
 }
 
 // GET /api/custom-templates — 목록 조회
