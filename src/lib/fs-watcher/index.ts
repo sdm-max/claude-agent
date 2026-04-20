@@ -28,8 +28,8 @@ export const HOME_BUS_KEY = "__home__";
 // Depth caps threaded through both chokidar config AND path classifier.
 // Classifier cap = chokidar depth + 1 (the base `.claude/` segment under project
 // root; no base for home since we watch ~/.claude/ directly).
-const PROJECT_WATCH_DEPTH = 4;
-const HOME_WATCH_DEPTH = 3;
+export const PROJECT_WATCH_DEPTH = 4;
+export const HOME_WATCH_DEPTH = 3;
 
 // ── HMR-safe singletons via globalThis ──────────────────────────────────
 declare global {
@@ -77,7 +77,7 @@ function relativeInsensitive(from: string, to: string): string | null {
   return null;
 }
 
-function classifyProjectPath(projectPath: string, filePath: string): ProjectWatchKind | null {
+export function classifyProjectPath(projectPath: string, filePath: string): ProjectWatchKind | null {
   const rel = relativeInsensitive(projectPath, filePath);
   if (rel === null || rel === "") return null;
 
@@ -114,7 +114,7 @@ function classifyProjectPath(projectPath: string, filePath: string): ProjectWatc
 }
 
 // ── Path → kind classifier (home ~/.claude scope) ───────────────────────
-function classifyHomePath(filePath: string): HomeWatchKind | null {
+export function classifyHomePath(filePath: string): HomeWatchKind | null {
   const home = os.homedir();
   const claudeDir = path.join(home, ".claude");
   const rel = relativeInsensitive(claudeDir, filePath);
