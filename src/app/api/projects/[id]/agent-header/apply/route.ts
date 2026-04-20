@@ -48,23 +48,48 @@ export async function POST(req: NextRequest, { params }: Params) {
     .filter((e) => e.isFile() && e.name.endsWith(".md"))
     .map((e) => e.name);
 
-  const updated: string[] = [];
+  // Step 1: dry-run — produce (name, original, next) for each file, collecting errors
+  type Plan = { name: string; full: string; next: string; changed: boolean };
+  const plans: Plan[] = [];
+  const skipped: { path: string; reason: string }[] = [];
+
   for (const name of entries) {
     const full = path.join(agentsDir, name);
     let original: string;
     try { original = fs.readFileSync(full, "utf8"); }
-    catch { continue; }
-    const next = mode === "inject" ? injectAgentHeader(original, headerContent) : stripAgentHeader(original);
-    if (next !== original) {
-      try { fs.writeFileSync(full, next, "utf8"); updated.push(name); }
-      catch { /* ignore per-file error */ }
+    catch (e) {
+      skipped.push({ path: name, reason: `read_failed: ${e instanceof Error ? e.message : String(e)}` });
+      continue;
+    }
+    let next: string;
+    try {
+      next = mode === "inject" ? injectAgentHeader(original, headerContent) : stripAgentHeader(original);
+    } catch (e) {
+      skipped.push({ path: name, reason: `transform_failed: ${e instanceof Error ? e.message : String(e)}` });
+      continue;
+    }
+    plans.push({ name, full, next, changed: next !== original });
+  }
+
+  // Step 2: commit only if ALL planning succeeded — any skipped means zero writes
+  const applied: string[] = [];
+  if (skipped.length === 0) {
+    for (const p of plans) {
+      if (!p.changed) continue;
+      try { fs.writeFileSync(p.full, p.next, "utf8"); applied.push(p.name); }
+      catch (e) {
+        skipped.push({ path: p.name, reason: `write_failed: ${e instanceof Error ? e.message : String(e)}` });
+        break;
+      }
     }
   }
 
   return NextResponse.json({
-    updated: updated.length,
+    updated: applied.length,
     total: entries.length,
-    files: updated,
+    files: applied,
+    applied,
+    skipped,
     mode,
   });
 }
