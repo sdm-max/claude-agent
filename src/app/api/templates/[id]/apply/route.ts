@@ -75,10 +75,11 @@ export async function POST(
   );
 
   // M8: writeDisk + DB insert를 transaction으로 묶기 (DB 실패시 파일은 남지만 snapshot 존재, 재실행 안전)
+  const appliedId = nanoid();
   getDb().transaction(() => {
     writeDiskWithSnapshot(target, configStr);
     getDb().insert(appliedTemplates).values({
-      id: nanoid(),
+      id: appliedId,
       scope,
       projectId,
       templateId: template.id,
@@ -98,6 +99,7 @@ export async function POST(
 
   return NextResponse.json({
     success: true,
+    appliedId,
     scope,
     config: configStr,
     extraFiles: filteredExtraFiles,
