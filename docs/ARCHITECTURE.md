@@ -8,7 +8,7 @@
 |-----|--------|------|
 | `/` (Dashboard) | - | 정상 |
 | `/projects` | - | 정상 |
-| `/projects/{id}` | Overview / Settings / CLAUDE.md / Agents / Rules / Hooks (6탭) | Rules frontmatter UI 없음, Skills 미구현, Worktrees 탭 미구현 |
+| `/projects/{id}` | Overview / Settings / CLAUDE.md / Agents / Rules / Hooks / Worktrees (7탭) | Rules frontmatter UI 없음, Skills 미구현 |
 | `/settings/global` | Form / JSON (2뷰) | CLAUDE.md 탭 없음 |
 | `/settings/user` | Settings / CLAUDE.md / Rules / Hooks / Agents (5탭) | Skills 탭 미구현 |
 | `/templates` | 카테고리별 | Workflows 섹션 미구현 |
@@ -33,7 +33,11 @@
 - /api/user/skills/* + /api/projects/[id]/skills/*
 - /api/workflows/*
 - /api/projects/[id]/agent-header-template
-- /api/projects/[id]/worktrees/status + sync
+
+**S6 로 구현 완료**:
+- /api/projects/[id]/worktrees — 목록/스캔
+- /api/projects/[id]/worktrees/rules-diff — master vs worktree rule diff
+- /api/projects/[id]/worktrees/rules-sync — 선택 적용
 
 ## Claude Code 스펙 정합성
 
@@ -44,7 +48,7 @@
 | `.claude/rules/*.md` + `paths:` frontmatter + 재귀 | ✅ v2.1.59+ | 저장 경로 OK | frontmatter UI 없음, 하위 디렉토리 미지원 |
 | `.claude/skills/<name>/SKILL.md` | ✅ | **미구현** | 신규 필요 |
 | `.claude/commands/*.md` | ✅ Legacy | 미구현 | 스킬로 통합 (별도 구현 안 함) |
-| settings.json.hooks | ✅ (17 이벤트) | 완전 | matcher preset 없음 (R3), 변수 치환 없음 (R2), Bash 빌더 없음 (R4) |
+| settings.json.hooks | ✅ (17 이벤트) | 완전 | matcher preset 없음 (R3), 변수 치환 없음 (R2) |
 | settings.json.permissions | ✅ | 완전 | - |
 | settings.json.mcpServers | ✅ | 완전 | - |
 | Managed (`/Library/.../managed-settings.json` + CLAUDE.md) | ✅ | Settings만 | CLAUDE.md 탭 미구현 (G1) |
@@ -75,3 +79,11 @@
 - 3 rules (governance / project-rules / role-system) + worktree별 확장
 - 20+ git worktrees (`/Users/min/.codex/worktrees/*/sees`)
 - Claude Code Settings Manager가 풀어야 할 실전 Pain: 공통 헤더 중복, 화이트리스트 hardcoding, worktree drift, Bash grep 패턴 시각화 부재
+
+## sees Pain Points 진행 (R1~R5)
+
+- ✅ R1 공통 헤더 일괄 관리
+- ✅ R2 Hook 템플릿 변수
+- ✅ R3 Matcher preset lib
+- ✅ R4 Bash 화이트리스트 빌더 (S5, `src/lib/bash-matcher-builder.ts` + `src/components/bash-matcher-builder/`)
+- ✅ R5 Worktree 규칙 동기화 (S6, `src/components/worktrees/` + 3 API routes)
