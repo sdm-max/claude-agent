@@ -5,9 +5,6 @@ import { workflows } from "@/lib/db/schema";
 import { eq, and, desc, isNull } from "drizzle-orm";
 import { isValidItem, type WorkflowItem } from "@/lib/workflows/validate";
 
-// Temporary re-export shim — keeps `../route` import in [id]/route.ts working until D-3b migrates it.
-export { isValidItem, type WorkflowItem };
-
 const VALID_SCOPES = ["global", "user", "project", "local"];
 
 // GET /api/workflows?scope=X&projectId=Y

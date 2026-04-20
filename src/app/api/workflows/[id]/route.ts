@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { workflows, appliedTemplates } from "@/lib/db/schema";
 import { and, eq } from "drizzle-orm";
-import { isValidItem } from "../route";
+import { isValidItem } from "@/lib/workflows/validate";
 
 type Params = { params: Promise<{ id: string }> };
 
