@@ -8,8 +8,21 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import type { ClaudeSettings, HookRule, HookEvent } from "@/lib/settings-schema";
 import { HOOK_EVENTS, TOOL_NAMES } from "@/lib/settings-schema";
+import {
+  MATCHER_PRESETS,
+  findPresetByPattern,
+  presetsForEvent,
+} from "@/lib/hook-matcher-presets";
+import BashMatcherBuilder from "@/components/bash-matcher-builder/BashMatcherBuilder";
 
 interface Props {
   projectId?: string | null;
@@ -234,6 +247,7 @@ function EventSection({
             <HookRuleRow
               key={i}
               rule={rule}
+              event={event}
               availableScripts={availableScripts}
               projectPath={projectPath}
               onUpdate={(r) => updateRule(i, r)}
@@ -250,19 +264,24 @@ function EventSection({
 
 function HookRuleRow({
   rule,
+  event,
   availableScripts,
   projectPath,
   onUpdate,
   onRemove,
 }: {
   rule: HookRule;
+  event: HookEvent;
   availableScripts: string[];
   projectPath: string;
   onUpdate: (rule: HookRule) => void;
   onRemove: () => void;
 }) {
   const [showToolPicker, setShowToolPicker] = useState(false);
+  const [showBashBuilder, setShowBashBuilder] = useState(false);
   const selectedTools = (rule.matcher || "").split("|").filter(Boolean);
+  const currentPreset = findPresetByPattern(rule.matcher ?? "");
+  const eventPresets = presetsForEvent(event);
 
   const toggleTool = (toolName: string) => {
     const current = new Set(selectedTools);
@@ -275,8 +294,49 @@ function HookRuleRow({
     onUpdate({ ...rule, matcher });
   };
 
+  const applyPreset = (key: string | null) => {
+    if (!key || key === "__custom__") return;
+    const preset = MATCHER_PRESETS.find((p) => p.key === key);
+    if (!preset) return;
+    onUpdate({ ...rule, matcher: preset.pattern });
+  };
+
+  const applyBashPattern = (pattern: string) => {
+    onUpdate({ ...rule, matcher: pattern });
+    setShowBashBuilder(false);
+  };
+
   return (
     <div className="p-3 bg-muted/30 rounded-md border border-border space-y-2">
+      {/* Preset dropdown */}
+      <div className="flex items-center gap-2">
+        <Label className="text-xs shrink-0 w-16">프리셋</Label>
+        <Select
+          value={currentPreset?.key ?? "__custom__"}
+          onValueChange={applyPreset}
+        >
+          <SelectTrigger className="flex-1">
+            <SelectValue placeholder="프리셋 선택 (선택 시 matcher 자동 입력)" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__custom__">사용자 지정 (직접 입력)</SelectItem>
+            {eventPresets.map((p) => (
+              <SelectItem key={p.key} value={p.key}>
+                {p.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button
+          variant="outline"
+          size="xs"
+          onClick={() => setShowBashBuilder(true)}
+          title="Bash 명령줄 차단 regex 생성기"
+        >
+          Bash 빌더
+        </Button>
+      </div>
+
       {/* Matcher */}
       <div className="space-y-1.5">
         <div className="flex items-center gap-2">
@@ -379,6 +439,24 @@ function HookRuleRow({
       >
         + Command
       </Button>
+
+      {/* Bash matcher builder dialog */}
+      <Dialog open={showBashBuilder} onOpenChange={setShowBashBuilder}>
+        <DialogContent className="sm:max-w-xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Bash 화이트리스트 빌더</DialogTitle>
+            <DialogDescription>
+              프리셋과 옵션을 조합해 Bash 명령줄 차단 regex 를 생성합니다.
+              결과는 이 Rule 의 matcher 에 설정됩니다.
+            </DialogDescription>
+          </DialogHeader>
+          <BashMatcherBuilder
+            initialPattern={rule.matcher ?? ""}
+            onPatternSelect={applyBashPattern}
+            onClose={() => setShowBashBuilder(false)}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
