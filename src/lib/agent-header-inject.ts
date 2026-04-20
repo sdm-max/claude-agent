@@ -24,19 +24,26 @@ export function injectAgentHeader(markdown: string, headerContent: string): stri
     return markdown.replace(re, block);
   }
 
-  // Detect frontmatter (--- ... ---) at the top
-  if (markdown.startsWith("---\n")) {
-    const fmEnd = markdown.indexOf("\n---\n", 4);
-    if (fmEnd > 0) {
-      const afterFmIndex = fmEnd + 5; // past "\n---\n"
-      const before = markdown.slice(0, afterFmIndex);
-      const after = markdown.slice(afterFmIndex);
-      return ensureTrailingNewline(before) + block + "\n\n" + after.replace(/^\n+/, "");
-    }
+  // Detect frontmatter — handle LF/CRLF and EOF-terminated closing fence
+  const fmRe = /^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/;
+  const fmMatch = markdown.match(fmRe);
+  let result: string;
+  if (fmMatch) {
+    const fmEnd = fmMatch[0].length;
+    const before = markdown.slice(0, fmEnd);
+    const after = markdown.slice(fmEnd);
+    result = ensureTrailingNewline(before) + block + "\n\n" + after.replace(/^\n+/, "");
+  } else {
+    // No frontmatter: prepend block
+    result = block + "\n\n" + markdown.replace(/^\n+/, "");
   }
 
-  // No frontmatter: prepend block
-  return block + "\n\n" + markdown.replace(/^\n+/, "");
+  // Post-condition: if original had frontmatter, result must still start with ---
+  if (fmMatch && !result.startsWith("---")) {
+    throw new Error("frontmatter_lost");
+  }
+
+  return result;
 }
 
 /**
