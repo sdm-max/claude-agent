@@ -85,10 +85,21 @@ function classifyProjectPath(projectPath: string, filePath: string): ProjectWatc
   if (parts[0] !== ".claude") return null;
 
   if (parts[1] === "claude.md") return "claudemd";
-  if (parts[1] === "rules" && parts[2]?.endsWith(".md")) return "rules";
-  if (parts[1] === "agents" && parts[2]?.endsWith(".md")) return "agents";
-  if (parts[1] === "hooks" && parts[2]?.endsWith(".sh")) return "hooks";
+
+  const leaf = parts[parts.length - 1] ?? "";
+
+  // Rules: nested subdirs allowed up to the watcher depth cap (chokidar depth:4
+  // under <root>/.claude/ means max 5 parts including ".claude").
+  if (parts[1] === "rules" && leaf.endsWith(".md") && parts.length >= 3 && parts.length <= 5) return "rules";
+
+  // Agents / Hooks: flat only (no nested dirs per SPEC).
+  if (parts[1] === "agents" && parts.length === 3 && leaf.endsWith(".md")) return "agents";
+  if (parts[1] === "hooks" && parts.length === 3 && leaf.endsWith(".sh")) return "hooks";
+
+  // Skills: subdirs (existing behavior, unchanged).
   if (parts[1] === "skills" && parts.length >= 3) return "skills";
+
+  // settings.json / settings.local.json at the top of .claude/
   if (parts.length === 2 && parts[1]?.startsWith("settings") && parts[1].endsWith(".json")) {
     return "settings";
   }
@@ -108,9 +119,15 @@ function classifyHomePath(filePath: string): HomeWatchKind | null {
   if (relLower === "settings.json" || relLower === "managed-settings.json") return "user-settings";
 
   const parts = relLower.split(path.sep);
-  if (parts[0] === "hooks" && parts[1]?.endsWith(".sh")) return "user-hooks";
-  if (parts[0] === "rules" && parts[1]?.endsWith(".md")) return "user-rules";
-  if (parts[0] === "agents" && parts[1]?.endsWith(".md")) return "user-agents";
+  const leaf = parts[parts.length - 1] ?? "";
+
+  if (parts[0] === "hooks" && parts.length === 2 && leaf.endsWith(".sh")) return "user-hooks";
+
+  // User rules: nested subdirs allowed up to home depth cap
+  // (chokidar depth:3 under ~/.claude/ means max 4 parts).
+  if (parts[0] === "rules" && leaf.endsWith(".md") && parts.length >= 2 && parts.length <= 4) return "user-rules";
+
+  if (parts[0] === "agents" && parts.length === 2 && leaf.endsWith(".md")) return "user-agents";
   if (parts[0] === "skills" && parts.length >= 2) return "user-skills";
 
   return null;
