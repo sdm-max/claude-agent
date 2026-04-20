@@ -49,7 +49,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     .map((e) => e.name);
 
   // Step 1: dry-run — produce (name, original, next) for each file, collecting errors
-  type Plan = { name: string; full: string; next: string; changed: boolean };
+  type Plan = { name: string; full: string; original: string; next: string; changed: boolean };
   const plans: Plan[] = [];
   const skipped: { path: string; reason: string }[] = [];
 
@@ -68,17 +68,35 @@ export async function POST(req: NextRequest, { params }: Params) {
       skipped.push({ path: name, reason: `transform_failed: ${e instanceof Error ? e.message : String(e)}` });
       continue;
     }
-    plans.push({ name, full, next, changed: next !== original });
+    plans.push({ name, full, original, next, changed: next !== original });
   }
 
   // Step 2: commit only if ALL planning succeeded — any skipped means zero writes
   const applied: string[] = [];
+  const rolledBack: string[] = [];
+  const rollbackFailed: { path: string; reason: string }[] = [];
+
   if (skipped.length === 0) {
     for (const p of plans) {
       if (!p.changed) continue;
-      try { fs.writeFileSync(p.full, p.next, "utf8"); applied.push(p.name); }
-      catch (e) {
+      try {
+        fs.writeFileSync(p.full, p.next, "utf8");
+        applied.push(p.name);
+      } catch (e) {
         skipped.push({ path: p.name, reason: `write_failed: ${e instanceof Error ? e.message : String(e)}` });
+        // Best-effort rollback: reverse-order restore of already-written files
+        for (let j = applied.length - 1; j >= 0; j--) {
+          const rb = plans.find((pp) => pp.name === applied[j]);
+          if (!rb) continue;
+          try {
+            fs.writeFileSync(rb.full, rb.original, "utf8");
+            rolledBack.push(rb.name);
+          } catch (re) {
+            rollbackFailed.push({ path: rb.name, reason: re instanceof Error ? re.message : String(re) });
+          }
+        }
+        // Clear applied since we attempted to undo them
+        applied.length = 0;
         break;
       }
     }
@@ -91,5 +109,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     applied,
     skipped,
     mode,
+    rolledBack,
+    rollbackFailed,
   });
 }
