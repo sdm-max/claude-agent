@@ -50,7 +50,18 @@ export async function POST(request: NextRequest) {
   const existingRaw = readDisk(target.absolutePath);
   let merged: ClaudeSettings = {};
   if (mode === "merge" && existingRaw) {
-    try { merged = JSON.parse(existingRaw) as ClaudeSettings; } catch { merged = {}; }
+    try {
+      merged = JSON.parse(existingRaw) as ClaudeSettings;
+    } catch (e) {
+      return NextResponse.json(
+        {
+          error: "settings_parse_failed",
+          path: target.absolutePath,
+          detail: e instanceof Error ? e.message : String(e),
+        },
+        { status: 409 },
+      );
+    }
   }
 
   const allExtraFiles: { path: string; content: string; description: string }[] = [];

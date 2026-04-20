@@ -60,8 +60,15 @@ export async function POST(
   if (mode === "merge" && existingRaw) {
     try {
       merged = deepMergeSettings(JSON.parse(existingRaw) as ClaudeSettings, filteredSettings);
-    } catch {
-      merged = filteredSettings;
+    } catch (e) {
+      return NextResponse.json(
+        {
+          error: "settings_parse_failed",
+          path: target.absolutePath,
+          detail: e instanceof Error ? e.message : String(e),
+        },
+        { status: 409 },
+      );
     }
   } else {
     merged = filteredSettings;
