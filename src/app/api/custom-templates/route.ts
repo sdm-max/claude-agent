@@ -103,7 +103,12 @@ export async function POST(request: NextRequest) {
   try {
     settings = sanitizeSettings(body.settings);
   } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : "invalid settings" }, { status: 400 });
+    const message = e instanceof Error ? e.message : "invalid settings";
+    const code =
+      message === "depth_exceeded" ? "depth_exceeded" :
+      message === "settings contains forbidden keys" ? "forbidden_keys" :
+      "invalid_settings";
+    return NextResponse.json({ error: message, code, detail: message }, { status: 400 });
   }
 
   // extraFiles 검증

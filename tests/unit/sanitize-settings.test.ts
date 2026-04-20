@@ -40,8 +40,9 @@ describe("sanitizeSettings (via POST /api/custom-templates)", () => {
     const req = makeRawRequest(raw);
     const res = await POST(req);
     expect(res.status).toBe(400);
-    const json = (await res.json()) as { error?: string };
+    const json = (await res.json()) as { error?: string; code?: string };
     expect(json.error).toMatch(/forbidden keys/);
+    expect(json.code).toBe("forbidden_keys");
   });
 
   it("rejects constructor key nested at depth 2 with 400", async () => {
@@ -52,8 +53,9 @@ describe("sanitizeSettings (via POST /api/custom-templates)", () => {
     });
     const res = await POST(req);
     expect(res.status).toBe(400);
-    const json = (await res.json()) as { error?: string };
+    const json = (await res.json()) as { error?: string; code?: string };
     expect(json.error).toMatch(/forbidden keys/);
+    expect(json.code).toBe("forbidden_keys");
   });
 
   it("rejects prototype key at top-level with 400", async () => {
@@ -64,8 +66,9 @@ describe("sanitizeSettings (via POST /api/custom-templates)", () => {
     });
     const res = await POST(req);
     expect(res.status).toBe(400);
-    const json = (await res.json()) as { error?: string };
+    const json = (await res.json()) as { error?: string; code?: string };
     expect(json.error).toMatch(/forbidden keys/);
+    expect(json.code).toBe("forbidden_keys");
   });
 
   it("rejects deeply nested object (> MAX_SANITIZE_DEPTH=32) with 400 + depth_exceeded", async () => {
@@ -81,8 +84,9 @@ describe("sanitizeSettings (via POST /api/custom-templates)", () => {
     });
     const res = await POST(req);
     expect(res.status).toBe(400);
-    const json = (await res.json()) as { error?: string };
+    const json = (await res.json()) as { error?: string; code?: string };
     expect(json.error).toMatch(/depth_exceeded/);
+    expect(json.code).toBe("depth_exceeded");
   });
 
   it("rejects __proto__ inside array element object with 400 (recursive walker covers arrays)", async () => {
@@ -92,7 +96,8 @@ describe("sanitizeSettings (via POST /api/custom-templates)", () => {
     const req = makeRawRequest(raw);
     const res = await POST(req);
     expect(res.status).toBe(400);
-    const json = (await res.json()) as { error?: string };
+    const json = (await res.json()) as { error?: string; code?: string };
     expect(json.error).toMatch(/forbidden keys/);
+    expect(json.code).toBe("forbidden_keys");
   });
 });
