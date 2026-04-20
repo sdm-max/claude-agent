@@ -1,3 +1,4 @@
+import { execFileSync } from "child_process";
 import fs from "fs";
 import path from "path";
 import { NextRequest, NextResponse } from "next/server";
@@ -73,6 +74,38 @@ export async function POST(req: NextRequest, { params }: Params) {
   if (worktreePath.replace(/\/+$/, "") === project.path.replace(/\/+$/, "")) {
     return NextResponse.json(
       { error: "worktree path must differ from the master project path" },
+      { status: 400 },
+    );
+  }
+
+  let allowedWorktrees: Set<string>;
+  try {
+    const output = execFileSync("git", ["worktree", "list", "--porcelain"], {
+      cwd: project.path,
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 5000,
+    });
+    const paths = output.split(/\n\s*\n/).flatMap((block) => {
+      const line = block.split("\n").find((l) => l.startsWith("worktree "));
+      return line
+        ? [line.slice("worktree ".length).trim().replace(/\/+$/, "")]
+        : [];
+    });
+    allowedWorktrees = new Set(paths);
+    allowedWorktrees.add(project.path.replace(/\/+$/, ""));
+  } catch {
+    // git failed — master-only mode: only project.path counts.
+    allowedWorktrees = new Set([project.path.replace(/\/+$/, "")]);
+  }
+
+  const normalizedIncoming = worktreePath.replace(/\/+$/, "");
+  if (!allowedWorktrees.has(normalizedIncoming)) {
+    return NextResponse.json(
+      {
+        error: "worktree_not_recognized",
+        detail: "worktree must be one of the project's git worktrees",
+      },
       { status: 400 },
     );
   }

@@ -1,3 +1,4 @@
+import { execFileSync } from "child_process";
 import crypto from "crypto";
 import fs from "fs";
 import path from "path";
@@ -77,6 +78,38 @@ export async function GET(req: NextRequest, { params }: Params) {
   const project = db.select().from(projects).where(eq(projects.id, id)).get();
   if (!project) {
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
+  }
+
+  let allowedWorktrees: Set<string>;
+  try {
+    const output = execFileSync("git", ["worktree", "list", "--porcelain"], {
+      cwd: project.path,
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 5000,
+    });
+    const paths = output.split(/\n\s*\n/).flatMap((block) => {
+      const line = block.split("\n").find((l) => l.startsWith("worktree "));
+      return line
+        ? [line.slice("worktree ".length).trim().replace(/\/+$/, "")]
+        : [];
+    });
+    allowedWorktrees = new Set(paths);
+    allowedWorktrees.add(project.path.replace(/\/+$/, ""));
+  } catch {
+    // git failed — master-only mode: only project.path counts.
+    allowedWorktrees = new Set([project.path.replace(/\/+$/, "")]);
+  }
+
+  const normalizedIncoming = worktreePath.replace(/\/+$/, "");
+  if (!allowedWorktrees.has(normalizedIncoming)) {
+    return NextResponse.json(
+      {
+        error: "worktree_not_recognized",
+        detail: "worktree must be one of the project's git worktrees",
+      },
+      { status: 400 },
+    );
   }
 
   const normalizedProject = project.path.replace(/\/+$/, "");
