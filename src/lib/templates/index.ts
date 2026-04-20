@@ -2386,10 +2386,14 @@ export function getAllTemplates(): (Template & { isCustom?: boolean })[] {
   } catch {
     // DB 조회 실패 시 하드코딩만 반환
   }
-  const customs = customRows.map((row) => ({
-    ...customRowToTemplate(row),
-    isCustom: true as const,
-  }));
+  const customs = customRows.flatMap((row) => {
+    try {
+      return [{ ...customRowToTemplate(row), isCustom: true as const }];
+    } catch (e) {
+      console.warn(`[templates] skipping corrupt custom row ${row.id}`, e);
+      return [];
+    }
+  });
   return [...hardcoded, ...customs];
 }
 
