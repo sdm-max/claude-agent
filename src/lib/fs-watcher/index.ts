@@ -25,6 +25,12 @@ interface WatcherRecord {
 // Synthetic bus key for home (~/.claude) watcher — not a real projectId.
 export const HOME_BUS_KEY = "__home__";
 
+// Depth caps threaded through both chokidar config AND path classifier.
+// Classifier cap = chokidar depth + 1 (the base `.claude/` segment under project
+// root; no base for home since we watch ~/.claude/ directly).
+const PROJECT_WATCH_DEPTH = 4;
+const HOME_WATCH_DEPTH = 3;
+
 // ── HMR-safe singletons via globalThis ──────────────────────────────────
 declare global {
    
@@ -90,7 +96,7 @@ function classifyProjectPath(projectPath: string, filePath: string): ProjectWatc
 
   // Rules: nested subdirs allowed up to the watcher depth cap (chokidar depth:4
   // under <root>/.claude/ means max 5 parts including ".claude").
-  if (parts[1] === "rules" && leaf.endsWith(".md") && parts.length >= 3 && parts.length <= 5) return "rules";
+  if (parts[1] === "rules" && leaf.endsWith(".md") && parts.length >= 3 && parts.length <= PROJECT_WATCH_DEPTH + 1) return "rules";
 
   // Agents / Hooks: flat only (no nested dirs per SPEC).
   if (parts[1] === "agents" && parts.length === 3 && leaf.endsWith(".md")) return "agents";
@@ -125,7 +131,7 @@ function classifyHomePath(filePath: string): HomeWatchKind | null {
 
   // User rules: nested subdirs allowed up to home depth cap
   // (chokidar depth:3 under ~/.claude/ means max 4 parts).
-  if (parts[0] === "rules" && leaf.endsWith(".md") && parts.length >= 2 && parts.length <= 4) return "user-rules";
+  if (parts[0] === "rules" && leaf.endsWith(".md") && parts.length >= 2 && parts.length <= HOME_WATCH_DEPTH + 1) return "user-rules";
 
   if (parts[0] === "agents" && parts.length === 2 && leaf.endsWith(".md")) return "user-agents";
   if (parts[0] === "skills" && parts.length >= 2) return "user-skills";
@@ -177,7 +183,7 @@ export function registerWatcher(projectId: string, projectPathInput: string) {
   const watcher = chokidar.watch(projectPath, {
     ignoreInitial: true,
     persistent: true,
-    depth: 4,
+    depth: PROJECT_WATCH_DEPTH,
     ignored: (p: string) =>
       p.includes(`${path.sep}node_modules`) ||
       p.includes(`${path.sep}.git${path.sep}`) ||
@@ -233,7 +239,7 @@ function ensureHomeWatcherStarted() {
     const watcher = chokidar.watch(claudeDir, {
       ignoreInitial: true,
       persistent: true,
-      depth: 3,
+      depth: HOME_WATCH_DEPTH,
       ignored: (p: string) =>
         p.includes(`${path.sep}node_modules`) ||
         p.includes(`${path.sep}.git${path.sep}`),
