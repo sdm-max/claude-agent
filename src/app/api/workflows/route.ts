@@ -6,13 +6,13 @@ import { eq, and, desc, isNull } from "drizzle-orm";
 
 const VALID_SCOPES = ["global", "user", "project", "local"];
 
-interface WorkflowItem {
+export interface WorkflowItem {
   templateId: string;
   excludeTopLevelKeys?: string[];
   excludeExtraFiles?: string[];
 }
 
-function isValidItem(x: unknown): x is WorkflowItem {
+export function isValidItem(x: unknown): x is WorkflowItem {
   if (!x || typeof x !== "object") return false;
   const o = x as Record<string, unknown>;
   if (typeof o.templateId !== "string" || o.templateId.length === 0) return false;

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { workflows, appliedTemplates } from "@/lib/db/schema";
 import { and, eq } from "drizzle-orm";
+import { isValidItem } from "../route";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -52,8 +53,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (typeof body.descriptionKo === "string") patch.descriptionKo = body.descriptionKo.trim();
   if (Array.isArray(body.items)) {
     for (const it of body.items) {
-      if (!it || typeof it !== "object" || typeof (it as Record<string, unknown>).templateId !== "string") {
-        return NextResponse.json({ error: "invalid item" }, { status: 400 });
+      if (!isValidItem(it)) {
+        return NextResponse.json({ error: "invalid item shape" }, { status: 400 });
       }
     }
     patch.items = JSON.stringify(body.items);
