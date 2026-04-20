@@ -11,6 +11,7 @@ import VersionHistory from "@/components/editors/VersionHistory";
 import HooksUnifiedEditor from "@/components/editors/HooksUnifiedEditor";
 import AgentEditor from "@/components/agents/AgentEditor";
 import SkillEditor from "@/components/editors/SkillEditor";
+import WorktreesTab from "@/components/worktrees/WorktreesTab";
 import ConflictBanner from "@/components/settings/ConflictBanner";
 import AppliedTemplatesBar from "@/components/settings/AppliedTemplatesBar";
 import SaveAsTemplateDialog from "@/components/settings/SaveAsTemplateDialog";
@@ -219,6 +220,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           <TabsTrigger value="agents">Agents</TabsTrigger>
           <TabsTrigger value="rules">Rules</TabsTrigger>
           <TabsTrigger value="hooks">Hooks</TabsTrigger>
+          <TabsTrigger value="worktrees">Worktrees</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="flex-1 overflow-y-auto p-6 space-y-6">
@@ -388,6 +390,10 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
               setSavedContent(json);
             }}
           />
+        </TabsContent>
+
+        <TabsContent value="worktrees" className="flex-1 flex flex-col overflow-hidden">
+          <WorktreesTab projectId={id} />
         </TabsContent>
       </Tabs>
     </div>
