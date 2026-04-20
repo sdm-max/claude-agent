@@ -48,6 +48,24 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   const applied: string[] = [];
   const now = Date.now();
 
+  // Pre-parse existing settings ONCE — fail fast on bad JSON (no disk/DB writes on parse failure)
+  const existingRaw = readDisk(target.absolutePath);
+  let merged: ClaudeSettings = {};
+  if (existingRaw) {
+    try {
+      merged = JSON.parse(existingRaw) as ClaudeSettings;
+    } catch (e) {
+      return NextResponse.json(
+        {
+          error: "settings_parse_failed",
+          path: target.absolutePath,
+          detail: e instanceof Error ? e.message : String(e),
+        },
+        { status: 409 },
+      );
+    }
+  }
+
   for (const item of items) {
     const template = getTemplateById(item.templateId);
     if (!template) continue;
@@ -59,16 +77,8 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
       delete (filteredSettings as Record<string, unknown>)[key];
     }
 
-    // Merge into current disk settings
-    const existingRaw = readDisk(target.absolutePath);
-    let merged: ClaudeSettings;
-    if (existingRaw) {
-      try { merged = deepMergeSettings(JSON.parse(existingRaw) as ClaudeSettings, filteredSettings); }
-      catch { merged = filteredSettings; }
-    } else {
-      merged = filteredSettings;
-    }
-
+    // Merge into running in-memory settings (start = parsed existing OR {})
+    merged = deepMergeSettings(merged, filteredSettings);
     const configStr = JSON.stringify(merged, null, 2);
 
     // Filter extraFiles
