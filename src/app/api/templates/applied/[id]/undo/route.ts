@@ -1,10 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
+import os from "os";
+import { nanoid } from "nanoid";
 import { getDb } from "@/lib/db";
-import { appliedTemplates, projects } from "@/lib/db/schema";
+import { appliedTemplates, fileVersions, projects } from "@/lib/db/schema";
 import { and, eq, ne, isNull } from "drizzle-orm";
 import { subtractSettings } from "@/lib/templates/subtract";
 import { resolveSettingsPath, readDisk, writeDiskWithSnapshot, type FileScope } from "@/lib/disk-files";
 import type { ClaudeSettings } from "@/lib/settings-schema";
+import {
+  collectSharedResolvedPaths,
+  parseExtraFilesColumn,
+  undoExtraFiles,
+} from "@/lib/templates/undo-files";
 
 // POST /api/templates/applied/[id]/undo
 export async function POST(
@@ -34,7 +41,7 @@ export async function POST(
     projectPath = p.path;
   }
 
-  // Collect other active template deltas
+  // Collect other active template deltas + extraFiles (same scope/projectId, self excluded)
   const otherConditions = [
     eq(appliedTemplates.scope, record.scope),
     eq(appliedTemplates.isActive, 1),
@@ -45,7 +52,10 @@ export async function POST(
   } else {
     otherConditions.push(isNull(appliedTemplates.projectId));
   }
-  const others = db.select({ deltaJson: appliedTemplates.deltaJson })
+  const others = db.select({
+      deltaJson: appliedTemplates.deltaJson,
+      extraFiles: appliedTemplates.extraFiles,
+    })
     .from(appliedTemplates)
     .where(and(...otherConditions))
     .all();
@@ -76,11 +86,43 @@ export async function POST(
 
   writeDiskWithSnapshot(target, nextStr);
 
+  // ── extraFiles unlink (D-5.1) ──────────────────────────────────────────
+  const basePath = projectPath || os.homedir();
+  const targetFiles = parseExtraFilesColumn(record.extraFiles);
+  const sharedResolved = collectSharedResolvedPaths(
+    basePath,
+    others.map((r) => r.extraFiles),
+  );
+
+  const fileResult = undoExtraFiles(
+    basePath,
+    targetFiles,
+    sharedResolved,
+    (_abs, relPath, content) => {
+      // Pre-unlink snapshot → file_versions for re-apply restoration.
+      db.insert(fileVersions)
+        .values({
+          id: nanoid(),
+          projectId: record.projectId ?? null,
+          relativePath: relPath,
+          content,
+          createdAt: Date.now(),
+        })
+        .run();
+    },
+  );
+
   // Deactivate record
   db.update(appliedTemplates)
     .set({ isActive: 0 })
     .where(eq(appliedTemplates.id, id))
     .run();
 
-  return NextResponse.json({ success: true, config: nextStr });
+  return NextResponse.json({
+    success: true,
+    config: nextStr,
+    removedFiles: fileResult.removedFiles,
+    keptSharedFiles: fileResult.keptSharedFiles,
+    errors: fileResult.errors,
+  });
 }
