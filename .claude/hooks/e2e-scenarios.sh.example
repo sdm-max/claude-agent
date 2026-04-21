@@ -1,0 +1,214 @@
+# ============================================================
+# TEMPLATE — Copy to .claude/hooks/e2e-scenarios.sh and customize.
+# This file is tracked in git; the real hook is ignored.
+#
+# Setup:
+#   cp .claude/hooks/e2e-scenarios.sh.example .claude/hooks/e2e-scenarios.sh
+#   chmod +x .claude/hooks/e2e-scenarios.sh
+#
+# Prerequisites:
+#   - dev server running on localhost:3000 (npm run dev)
+#   - Test project registered at /tmp/test-claude-project
+#     (POST /api/projects -d '{"path":"/tmp/test-claude-project"}')
+#
+# Updated 2026-04-22 (D-4 B안)
+# ============================================================
+#!/bin/bash
+# .claude/hooks/e2e-scenarios.sh
+# e2e-before-commit.sh에서 호출됨. exit 0 = PASS, non-zero = FAIL (commit 차단)
+#
+# 방어:
+# - S1: Apply+Undo round-trip + template spec 비교
+# - S2: Skills write-read-delete
+# - S3: Workflows API (shallow — 확장 권장)
+# - S4: Hook Presets 필수 항목 존재
+# - 모든 curl 10s timeout
+# - 테스트 프로젝트 .claude/ 사전 삭제 (pre-touch 차단)
+# - 관찰 가능한 cleanup (silently 안 삼킴)
+#
+# 전제:
+# - dev 서버가 localhost:3000 에 떠 있어야
+# - Test Project가 /tmp/test-claude-project 경로로 등록되어 있어야
+# - REQUIRED_PRESETS 목록은 프로젝트별 조정
+
+set -euo pipefail
+
+API="http://localhost:3000"
+TEST_PROJ_PATH="/tmp/test-claude-project"
+CURL_TIMEOUT=10
+
+fail() { echo "FAIL: $*" >&2; exit 1; }
+_curl() { curl -sf --max-time "$CURL_TIMEOUT" "$@"; }
+
+# ─── Setup: Test Project ID ───
+PROJECTS=$(_curl "$API/api/projects") || fail "cannot reach $API/api/projects"
+TEST_PROJ_ID=$(echo "$PROJECTS" | jq -r ".[] | select(.path == \"$TEST_PROJ_PATH\") | .id")
+[[ -z "$TEST_PROJ_ID" ]] && fail "Test Project not registered at $TEST_PROJ_PATH. Setup: POST $API/api/projects -d '{\"path\":\"$TEST_PROJ_PATH\"}'"
+
+# ─── Setup: 기존 applied 전부 정리 ───
+APPLIED_LIST=$(_curl "$API/api/templates/applied?scope=local&projectId=$TEST_PROJ_ID") \
+  || fail "cleanup: cannot list applied"
+APPLIED_IDS=$(echo "$APPLIED_LIST" | jq -r '.[].id')
+
+if [[ -n "$APPLIED_IDS" ]]; then
+  while IFS= read -r id; do
+    [[ -z "$id" ]] && continue
+    _curl -XPOST "$API/api/templates/applied/$id/undo" >/dev/null \
+      || fail "cleanup: undo $id failed (stale state risk)"
+  done <<< "$APPLIED_IDS"
+fi
+
+# ─── Setup: test project .claude/ 완전 삭제 (pre-touch 차단) ───
+if [[ -d "$TEST_PROJ_PATH/.claude" ]]; then
+  rm -rf "$TEST_PROJ_PATH/.claude" || fail "pre-clean: cannot remove $TEST_PROJ_PATH/.claude"
+fi
+
+# ─── S1: Apply + Undo round-trip + spec 비교 ───
+echo "[S1] Apply + Undo"
+
+TEMPLATE_SPEC=$(_curl "$API/api/templates/security-basic") \
+  || fail "S1: cannot fetch template spec"
+EXPECTED_ALLOW=$(echo "$TEMPLATE_SPEC" | jq -c '.settings.permissions.allow // []')
+[[ "$(echo "$EXPECTED_ALLOW" | jq 'length')" -gt 0 ]] \
+  || fail "S1: template spec has empty allow (sanity)"
+
+APPLY_RESP=$(_curl -XPOST "$API/api/templates/security-basic/apply" \
+  -H "Content-Type: application/json" \
+  -d "{\"scope\":\"local\",\"projectPath\":\"$TEST_PROJ_PATH\",\"mode\":\"merge\"}") \
+  || fail "S1: apply request failed"
+
+echo "$APPLY_RESP" | jq -e '.success == true' >/dev/null \
+  || fail "S1: apply not success. resp=$APPLY_RESP"
+
+APPLY_ID=$(echo "$APPLY_RESP" | jq -r '.appliedId // .id // empty')
+[[ -z "$APPLY_ID" ]] && fail "S1: apply response missing id. resp=$APPLY_RESP"
+
+SETTINGS_FILE="$TEST_PROJ_PATH/.claude/settings.local.json"
+[[ -f "$SETTINGS_FILE" ]] || fail "S1: $SETTINGS_FILE not created"
+
+ACTUAL_ALLOW=$(jq -c '.permissions.allow // []' "$SETTINGS_FILE")
+[[ "$EXPECTED_ALLOW" == "$ACTUAL_ALLOW" ]] \
+  || fail "S1: allow mismatch. expected=$EXPECTED_ALLOW actual=$ACTUAL_ALLOW"
+
+# Undo
+UNDO_RESP=$(_curl -XPOST "$API/api/templates/applied/$APPLY_ID/undo") \
+  || fail "S1: undo request failed"
+echo "$UNDO_RESP" | jq -e '.success == true' >/dev/null \
+  || fail "S1: undo not success. resp=$UNDO_RESP"
+
+if [[ -f "$SETTINGS_FILE" ]]; then
+  POST_UNDO_ALLOW=$(jq -c '.permissions.allow // []' "$SETTINGS_FILE")
+  [[ "$POST_UNDO_ALLOW" == "[]" ]] \
+    || fail "S1: undo did not revert. allow still=$POST_UNDO_ALLOW"
+fi
+
+echo "  S1: PASS (apply+spec-match+undo+revert)"
+
+# ─── S2: Skills write-read-delete round-trip ───
+echo "[S2] Skills API round-trip"
+
+NEW_SKILL=$(_curl -XPOST "$API/api/user/skills" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"e2e-test-skill-xyz","content":"test"}') \
+  || fail "S2: create failed"
+SKILL_NAME=$(echo "$NEW_SKILL" | jq -r '.name // empty')
+[[ -z "$SKILL_NAME" ]] && fail "S2: create response missing name. resp=$NEW_SKILL"
+
+LIST=$(_curl "$API/api/user/skills")
+echo "$LIST" | jq -e --arg name "$SKILL_NAME" '.[] | select(.name == $name)' >/dev/null \
+  || fail "S2: created skill $SKILL_NAME not in list (persistence fail)"
+
+_curl -XDELETE "$API/api/user/skills/$SKILL_NAME" >/dev/null \
+  || echo "WARN: S2 cleanup delete failed for $SKILL_NAME" >&2
+
+echo "  S2: PASS (write-read-delete)"
+
+# ─── S3: Workflows API (shallow — 확장 권장) ───
+echo "[S3] Workflows API"
+WORKFLOWS=$(_curl "$API/api/workflows")
+echo "$WORKFLOWS" | jq -e '. | type == "array"' >/dev/null \
+  || fail "S3: workflows not an array. resp=$WORKFLOWS"
+echo "  S3: PASS (shallow)"
+
+# ─── S4: Hook Presets + 필수 항목 존재 ───
+echo "[S4] Hook Presets"
+PRESETS=$(_curl "$API/api/hook-presets")
+echo "$PRESETS" | jq -e '.presets | length > 0' >/dev/null \
+  || fail "S4: presets empty. resp=$PRESETS"
+
+REQUIRED_PRESETS='["any"]'
+MISSING=$(echo "$PRESETS" | jq --argjson req "$REQUIRED_PRESETS" \
+  '($req - (.presets | map(.key)))')
+[[ "$MISSING" == "[]" ]] || fail "S4: missing required presets: $MISSING"
+
+echo "  S4: PASS"
+
+# ─── S5: Workflows CRUD round-trip ───
+echo "[S5] Workflows CRUD"
+
+WF_CREATE=$(_curl -XPOST "$API/api/workflows" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"e2e-q5-wf","scope":"user","items":[{"templateId":"security-basic"}]}') \
+  || fail "S5: create failed"
+WF_ID=$(echo "$WF_CREATE" | jq -r '.id // empty')
+[[ -z "$WF_ID" ]] && fail "S5: create response missing id. resp=$WF_CREATE"
+
+PATCH_RESP=$(_curl -XPATCH "$API/api/workflows/$WF_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"items":[{"templateId":"security-basic","excludeTopLevelKeys":["hooks"]}]}') \
+  || fail "S5: PATCH failed"
+echo "$PATCH_RESP" | jq -e '.success == true' >/dev/null \
+  || fail "S5: PATCH not success. resp=$PATCH_RESP"
+
+# Negative PATCH — scalar exclude must 400
+SCALAR_RESP=$(curl -s --max-time "$CURL_TIMEOUT" -o /dev/null -w "%{http_code}" \
+  -XPATCH "$API/api/workflows/$WF_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"items":[{"templateId":"security-basic","excludeTopLevelKeys":"hooks"}]}') \
+  || fail "S5: scalar PATCH curl error"
+[[ "$SCALAR_RESP" == "400" ]] || fail "S5: scalar exclude should 400, got $SCALAR_RESP"
+
+# DELETE + verify 404
+_curl -XDELETE "$API/api/workflows/$WF_ID" >/dev/null \
+  || fail "S5: DELETE failed"
+
+STATUS_AFTER=$(curl -s --max-time "$CURL_TIMEOUT" -o /dev/null -w "%{http_code}" \
+  "$API/api/workflows/$WF_ID")
+[[ "$STATUS_AFTER" == "404" ]] || fail "S5: post-delete GET should 404, got $STATUS_AFTER"
+
+echo "  S5: PASS (create+PATCH+scalar-reject+delete+404)"
+
+# ─── S6: Custom Templates sanitize ───
+echo "[S6] Custom Templates sanitize"
+
+# 1. __proto__ key (raw JSON required — JS literal would drop it via setter)
+PROTO_STATUS=$(curl -s --max-time "$CURL_TIMEOUT" -o /dev/null -w "%{http_code}" \
+  -XPOST "$API/api/custom-templates" \
+  -H "Content-Type: application/json" \
+  --data-raw '{"name":"e2e-q6-proto","category":"custom","settings":{"__proto__":{"polluted":true}}}') \
+  || fail "S6: proto curl error"
+[[ "$PROTO_STATUS" == "400" ]] || fail "S6: __proto__ should 400, got $PROTO_STATUS"
+
+# 2. Valid settings with prototype-as-value (regression for T-F2.7)
+VALID_RESP=$(_curl -XPOST "$API/api/custom-templates" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"e2e-q6-valid","category":"custom","settings":{"env":{"TOPIC":"prototype"}}}') \
+  || fail "S6: valid create failed"
+CT_ID=$(echo "$VALID_RESP" | jq -r '.id // empty')
+[[ -z "$CT_ID" ]] && fail "S6: valid create missing id. resp=$VALID_RESP"
+
+# 3. List includes the valid one, excludes the rejected one
+LIST=$(_curl "$API/api/custom-templates")
+echo "$LIST" | jq -e --arg id "$CT_ID" '.[] | select(.id == $id)' >/dev/null \
+  || fail "S6: valid template not in list"
+echo "$LIST" | jq -e '.[] | select(.name == "e2e-q6-proto") | length' >/dev/null \
+  && fail "S6: rejected __proto__ template leaked into list"
+
+# Cleanup
+_curl -XDELETE "$API/api/custom-templates/$CT_ID" >/dev/null \
+  || echo "WARN: S6 cleanup DELETE failed for $CT_ID" >&2
+
+echo "  S6: PASS (sanitize-reject+valid-create+list+cleanup)"
+
+echo "ALL PASS"
+exit 0

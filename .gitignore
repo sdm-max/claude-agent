@@ -44,4 +44,8 @@ next-env.d.ts
 /data/*.db
 /data/*.db-wal
 /data/*.db-shm
-.claude/
+# Ignore all of .claude/ except hook example templates (D-4 B안)
+.claude/*
+!.claude/hooks/
+.claude/hooks/*
+!.claude/hooks/*.example
