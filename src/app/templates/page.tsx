@@ -951,84 +951,92 @@ function TemplatesPageInner() {
 
               <div className="space-y-4">
                 {/* Phase 2-1: per-block Apply checklist */}
-                {detail.settings &&
-                  Object.keys(detail.settings).length > 0 && (
-                    <div className="space-y-2">
-                      <h3 className="text-sm font-semibold">
-                        적용할 항목 선택
-                      </h3>
-                      <p className="text-xs text-muted-foreground">
-                        체크 해제한 항목은 Apply 시 머지에서 제외됩니다.
-                      </p>
-                      {Object.entries(
-                        detail.settings as Record<string, unknown>,
-                      ).map(([key, val]) => {
-                        const checked = !detailExcludedKeys.has(key);
-                        const preview = JSON.stringify(val, null, 2);
-                        return (
-                          <label
-                            key={key}
-                            className="flex items-start gap-2 p-2 border rounded cursor-pointer hover:bg-accent"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={() => {
-                                setDetailExcludedKeys((prev) => {
-                                  const next = new Set(prev);
-                                  if (next.has(key)) next.delete(key);
-                                  else next.add(key);
-                                  return next;
-                                });
-                              }}
-                              className="mt-1"
-                            />
-                            <div className="flex-1 min-w-0">
-                              <div className="text-sm font-medium">{key}</div>
-                              <pre className="text-xs text-muted-foreground mt-0.5 truncate">
-                                {preview.length > 120
-                                  ? preview.slice(0, 120) + "..."
-                                  : preview}
-                              </pre>
-                            </div>
-                          </label>
-                        );
-                      })}
-                      {detail.extraFiles && detail.extraFiles.length > 0 && (
+                {((detail.settings &&
+                  Object.keys(detail.settings).length > 0) ||
+                  (detail.extraFiles && detail.extraFiles.length > 0)) && (
+                  <div className="space-y-2">
+                    {detail.settings &&
+                      Object.keys(detail.settings).length > 0 && (
                         <>
-                          <h4 className="text-xs font-semibold text-muted-foreground mt-3">
-                            Extra Files
-                          </h4>
-                          {detail.extraFiles.map((f) => {
-                            const checked = !detailExcludedFiles.has(f.path);
+                          <h3 className="text-sm font-semibold">
+                            적용할 항목 선택
+                          </h3>
+                          <p className="text-xs text-muted-foreground">
+                            체크 해제한 항목은 Apply 시 머지에서 제외됩니다.
+                          </p>
+                          {Object.entries(
+                            detail.settings as Record<string, unknown>,
+                          ).map(([key, val]) => {
+                            const checked = !detailExcludedKeys.has(key);
+                            const preview = JSON.stringify(val, null, 2);
                             return (
                               <label
-                                key={f.path}
-                                className="flex items-center gap-2 p-2 border rounded cursor-pointer hover:bg-accent"
+                                key={key}
+                                className="flex items-start gap-2 p-2 border rounded cursor-pointer hover:bg-accent"
                               >
                                 <input
                                   type="checkbox"
                                   checked={checked}
                                   onChange={() => {
-                                    setDetailExcludedFiles((prev) => {
+                                    setDetailExcludedKeys((prev) => {
                                       const next = new Set(prev);
-                                      if (next.has(f.path))
-                                        next.delete(f.path);
-                                      else next.add(f.path);
+                                      if (next.has(key)) next.delete(key);
+                                      else next.add(key);
                                       return next;
                                     });
                                   }}
+                                  className="mt-1"
                                 />
-                                <span className="text-sm font-mono">
-                                  {f.path}
-                                </span>
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-sm font-medium">
+                                    {key}
+                                  </div>
+                                  <pre className="text-xs text-muted-foreground mt-0.5 truncate">
+                                    {preview.length > 120
+                                      ? preview.slice(0, 120) + "..."
+                                      : preview}
+                                  </pre>
+                                </div>
                               </label>
                             );
                           })}
                         </>
                       )}
-                    </div>
-                  )}
+                    {detail.extraFiles && detail.extraFiles.length > 0 && (
+                      <>
+                        <h4 className="text-xs font-semibold text-muted-foreground mt-3">
+                          Extra Files
+                        </h4>
+                        {detail.extraFiles.map((f) => {
+                          const checked = !detailExcludedFiles.has(f.path);
+                          return (
+                            <label
+                              key={f.path}
+                              className="flex items-center gap-2 p-2 border rounded cursor-pointer hover:bg-accent"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => {
+                                  setDetailExcludedFiles((prev) => {
+                                    const next = new Set(prev);
+                                    if (next.has(f.path))
+                                      next.delete(f.path);
+                                    else next.add(f.path);
+                                    return next;
+                                  });
+                                }}
+                              />
+                              <span className="text-sm font-mono">
+                                {f.path}
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </>
+                    )}
+                  </div>
+                )}
 
                 {/* Settings JSON */}
                 {detail.settingsJson !== "{}" && (
