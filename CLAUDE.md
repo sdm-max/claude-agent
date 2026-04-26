@@ -1,34 +1,60 @@
-# Claude Code Settings Manager — 프로젝트 규칙 (Implementer용)
+# Claude Code Settings Manager — 프로젝트 규칙
 
-<!-- version: 2.0 | updated: 2026-04-18 | role: Implementer -->
-<!-- 3-Claude 체제. 세션 시작 시 .claude/prompts/implementer.md 함께 로드 권장 -->
+<!-- version: 2.1 | updated: 2026-04-26 | mode: 1 Claude session + named subagents -->
+<!-- S-2 sprint 진행 중 — 신규 .claude/agents/*.md 정의 도입 (implementer agent 1/5 완료) -->
 
 @docs/PROJECT.md
 @docs/ARCHITECTURE.md
 
 ---
 
-## 이 프로젝트의 역할 구조
+## 이 프로젝트의 역할 구조 (S-2 sprint 이후 단순화)
 
-이 프로젝트(`claude-agent`)는 **Implementer 역할** Claude 세션이 실행하는 곳.
+이 프로젝트(`claude-agent`)는 **메인 Claude 세션 + named subagents** 모델로 동작.
 
-- **SPEC/DESIGN/TASKS 작성** → `test-project`의 Reviewer Claude가 담당
-- **구현** → 이 세션 (Implementer)
-- **프로세스 감독** → `test-ref-agent`의 Supervisor Claude
+- **메인 세션** = 오케스트레이터 + 사용자 인터페이스
+- **Subagents** (`.claude/agents/<name>.md` 정의):
+  - `implementer` — 단일 task 코드 변경 (1-2 파일)
+  - (S-2.4 후) `reviewer` — diff 검증 + outbox APPROVED 작성
+  - (S-2.4 후) `blind-reviewer` — 세션 컨텍스트 0 독립 리뷰
+  - (S-2.4 후) `investigator` — 버그 재현 + 원인 분석
+  - (S-2.4 후) `worktree-bypass` — deny-ruled 파일 단일 수정
 
-자세한 역할 구분: `.claude/pipeline/ROLES.md`
+> 과거 v2.0의 "3-Claude (test-project Reviewer / claude-agent Implementer / test-ref-agent Supervisor)" 컨셉은 conceptual fiction이었음. 실제로는 항상 단일 세션 + 서브에이전트 위임이었고, S-2 sprint에서 이를 정직하게 정리.
 
 ---
 
-## 세션 시작 필수 순서
+## 세션 시작 필수 순서 (v2.1)
 
-1. `.claude/prompts/implementer.md` 로드 (session-start-prompt 형태로)
-2. `.claude/pipeline/ROLES.md` Read
-3. `.claude/pipeline/alerts/_index.md` + ALERT 파일 확인 → 있으면 정지
-4. `.claude/pipeline/state/current-task.md` Read
-5. `.claude/pipeline/outbox/_index.md` Read (Reviewer 판정 확인)
-6. `git log -5` 최근 커밋 맥락
-7. 상태 보고 1줄 + 지시 대기
+**MEMORY.md는 자동 로드됨**. 첫 줄에 "🔴 다음 세션 시작 시 첫 작업" 있으면 그것 우선.
+
+1. **MEMORY 첫 작업 지시 확인** — 자동 로드된 MEMORY.md 상단 5줄 스캔
+2. `docs/worklog/session-<latest-date>.md` Read — 직전 세션 컨텍스트 (MEMORY가 가리키는 파일)
+3. `.claude/pipeline/alerts/` 디렉터리 → ALERT-*.md 있으면 정지·보고
+4. `.claude/pipeline/state/current-task.md` Read — 현재 task id + 핸드오프 정보
+5. `git log --oneline -10` — 최근 커밋 맥락
+6. (선택) `.claude/pipeline/outbox/` 최근 diff-review 확인 — 이전 sprint 마무리 여부
+7. (선택) `npm run verify:full` — 게이트 baseline 확인 (74 tests 등)
+8. 상태 보고 1줄 + 사용자 지시 대기
+
+> **재시작 직후 주의**: outbox write 권한이 deny rule이라 새 세션에서 reviewer subagent 호출 시 `/permissions add Write(.claude/pipeline/outbox/**)` 일시 해제 필요할 수 있음. MEMORY가 알려줌.
+
+---
+
+## Subagent 호출 규약 (S-2 sprint 완료 후 표준)
+
+```ts
+// S-2.2 commit 후 가능 (재시작 후)
+Agent({ subagent_type: "implementer", prompt: "Task X.Y per SPEC §..." })
+
+// S-2.4 commit 후 가능
+Agent({ subagent_type: "reviewer", prompt: "Verify diff request: ..." })
+Agent({ subagent_type: "blind-reviewer", prompt: "Range: <SHA>..<SHA>" })
+Agent({ subagent_type: "investigator", prompt: "Symptom: ..." })
+Agent({ subagent_type: "worktree-bypass", prompt: "File: <path>, anchor: ..." })
+```
+
+각 subagent 정의: `.claude/agents/<name>.md` (frontmatter + 본문 시스템 프롬프트). 신규 agent 추가 시 **세션 재시작 필요** (Claude Code hot-reload는 수정만 자동, 신규 정의는 인식 안 됨).
 
 ---
 
@@ -104,5 +130,6 @@ Reviewer가 별도로 실제 curl 실행으로 재검증.
 
 ## 변경 이력
 
-- **2026-04-18 v2.0**: 3-Claude 체제 반영. 기존 "확인 질문 금지 / 바로 전부 구현 / 부분 완성 후 멈추기 금지" 규칙 **제거** (drift 원인). Reviewer 승인 기반 작업 흐름으로 전환.
+- **2026-04-26 v2.1**: 3-Claude conceptual fiction 정리. 실제 모델인 "1 세션 + named subagents"로 표기 변경. 세션 시작 순서 갱신 (MEMORY.md 첫 줄 우선, worklog 참조). subagent 호출 규약 추가. Sprint S-2 ongoing — `.claude/agents/` 정의 도입 중.
+- **2026-04-18 v2.0**: 3-Claude 체제 (당시 표기). Reviewer 승인 기반 작업 흐름으로 전환. 기존 "확인 질문 금지 / 바로 전부 구현 / 부분 완성 후 멈추기 금지" 규칙 제거.
 - 이전 v1 rules는 `docs/_archive/CLAUDE.md.v1-backup` (필요 시 생성)
