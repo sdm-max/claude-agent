@@ -5,6 +5,7 @@
 
 @docs/PROJECT.md
 @docs/ARCHITECTURE.md
+@docs/DEVELOPMENT_PRINCIPLES.md
 
 ---
 
