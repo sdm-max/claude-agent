@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { ClaudeSettings, HookRule, McpServerConfig, HookEvent } from "@/lib/settings-schema";
-import { MODEL_OPTIONS, HOOK_EVENTS, OUTPUT_FORMAT_OPTIONS } from "@/lib/settings-schema";
+import { MODEL_OPTIONS, HOOK_EVENTS, OUTPUT_FORMAT_OPTIONS, EFFORT_LEVELS, PERMISSION_MODES } from "@/lib/settings-schema";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -144,6 +144,60 @@ export default function SettingsForm({ settings, onChange, hideHooks, trace }: P
               <SelectContent>
                 {OUTPUT_FORMAT_OPTIONS.map((fmt) => (
                   <SelectItem key={fmt} value={fmt}>{fmt}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>Effort Level</Label>
+            <FieldDesc keyName="effortLevel" />
+            <Select
+              value={settings.effortLevel || ""}
+              onValueChange={(v) => update({ effortLevel: (v as ClaudeSettings["effortLevel"]) || undefined })}
+            >
+              <SelectTrigger className="mt-1 w-48">
+                <SelectValue placeholder="Default" />
+              </SelectTrigger>
+              <SelectContent>
+                {EFFORT_LEVELS.map((lvl) => (
+                  <SelectItem key={lvl.value} value={lvl.value}>{lvl.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <Label>Skip Auto Permission Prompt</Label>
+              <FieldDesc keyName="skipAutoPermissionPrompt" />
+            </div>
+            <Switch
+              checked={settings.skipAutoPermissionPrompt || false}
+              onCheckedChange={(checked) => update({ skipAutoPermissionPrompt: checked || undefined })}
+            />
+          </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <Label>Auto Memory Enabled</Label>
+              <FieldDesc keyName="autoMemoryEnabled" />
+            </div>
+            <Switch
+              checked={settings.autoMemoryEnabled || false}
+              onCheckedChange={(checked) => update({ autoMemoryEnabled: checked || undefined })}
+            />
+          </div>
+          <div>
+            <Label>Default Permission Mode</Label>
+            <FieldDesc keyName="defaultMode" />
+            <Select
+              value={settings.defaultMode || ""}
+              onValueChange={(v) => update({ defaultMode: (v as ClaudeSettings["defaultMode"]) || undefined })}
+            >
+              <SelectTrigger className="mt-1 w-48">
+                <SelectValue placeholder="Default" />
+              </SelectTrigger>
+              <SelectContent>
+                {PERMISSION_MODES.map((mode) => (
+                  <SelectItem key={mode.value} value={mode.value}>{mode.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
