@@ -44,8 +44,9 @@ next-env.d.ts
 /data/*.db
 /data/*.db-wal
 /data/*.db-shm
-# Ignore all of .claude/ except hook example templates (D-4 B안)
+# Ignore all of .claude/ except hook example templates (D-4 B안) + agent definitions (S-2 sprint)
 .claude/*
 !.claude/hooks/
 .claude/hooks/*
 !.claude/hooks/*.example
+!.claude/agents/
