@@ -111,8 +111,12 @@ export interface AutoModeConfig {
 export interface ClaudeSettings {
   // Core
   model?: string;
-  effortLevel?: "low" | "medium" | "high";
+  effortLevel?: "low" | "medium" | "high" | "xhigh";
   defaultMode?: "default" | "acceptEdits" | "plan" | "auto" | "dontAsk" | "bypassPermissions";
+
+  // Auto mode / permission shortcuts (Claude Code v2.x 키)
+  skipAutoPermissionPrompt?: boolean;
+  autoMemoryEnabled?: boolean;
 
   // Permissions
   permissions?: {
@@ -231,6 +235,7 @@ export const EFFORT_LEVELS = [
   { value: "low", label: "Low" },
   { value: "medium", label: "Medium" },
   { value: "high", label: "High" },
+  { value: "xhigh", label: "Extra High" },
 ] as const;
 
 export const PERMISSION_MODES = [
